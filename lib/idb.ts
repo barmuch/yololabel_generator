@@ -22,36 +22,54 @@ let db: IDBPDatabase<YoloLabelDB> | null = null;
  * Initialize IndexedDB database
  */
 async function initDB(): Promise<IDBPDatabase<YoloLabelDB>> {
-  if (db) return db;
+  if (db) {
+    console.log('Using existing database connection');
+    return db;
+  }
 
-  db = await openDB<YoloLabelDB>('yolo-label-generator', 1, {
-    upgrade(db) {
-      // Projects store
-      const projectStore = db.createObjectStore('projects', { keyPath: 'id' });
-      projectStore.createIndex('by-name', 'name');
-      projectStore.createIndex('by-updated', 'updatedAt');
+  try {
+    console.log('Initializing IndexedDB database...');
+    db = await openDB<YoloLabelDB>('yolo-label-generator', 1, {
+      upgrade(db) {
+        console.log('Upgrading database schema...');
+        // Projects store
+        const projectStore = db.createObjectStore('projects', { keyPath: 'id' });
+        projectStore.createIndex('by-name', 'name');
+        projectStore.createIndex('by-updated', 'updatedAt');
 
-      // Settings store
-      db.createObjectStore('settings', { keyPath: 'key' });
-    },
-  });
-
-  return db;
+        // Settings store
+        db.createObjectStore('settings', { keyPath: 'key' });
+        console.log('Database schema upgraded successfully');
+      },
+    });
+    console.log('IndexedDB database initialized successfully');
+    return db;
+  } catch (error) {
+    console.error('Failed to initialize IndexedDB:', error);
+    throw error;
+  }
 }
 
 /**
  * Save project to IndexedDB
  */
 export async function saveProject(project: Project): Promise<void> {
-  const database = await initDB();
-  
-  // Update timestamp
-  const updatedProject = {
-    ...project,
-    updatedAt: Date.now(),
-  };
+  try {
+    console.log('Saving project to IndexedDB:', project.id, project.name);
+    const database = await initDB();
+    
+    // Update timestamp
+    const updatedProject = {
+      ...project,
+      updatedAt: Date.now(),
+    };
 
-  await database.put('projects', updatedProject);
+    await database.put('projects', updatedProject);
+    console.log('Project saved successfully to IndexedDB');
+  } catch (error) {
+    console.error('Error saving project to IndexedDB:', error);
+    throw error;
+  }
 }
 
 /**
@@ -67,8 +85,17 @@ export async function loadProject(projectId: string): Promise<Project | null> {
  * Get all projects from IndexedDB
  */
 export async function getAllProjects(): Promise<Project[]> {
-  const database = await initDB();
-  return await database.getAll('projects');
+  try {
+    console.log('Initializing database for getAllProjects...');
+    const database = await initDB();
+    console.log('Database initialized, getting all projects...');
+    const projects = await database.getAll('projects');
+    console.log('Retrieved projects from IndexedDB:', projects);
+    return projects;
+  } catch (error) {
+    console.error('Error in getAllProjects:', error);
+    throw error;
+  }
 }
 
 /**

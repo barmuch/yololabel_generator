@@ -7,6 +7,7 @@ import { ClassPanel } from '@/components/ClassPanel';
 import { ImageStrip } from '@/components/ImageStrip';
 import { Toolbar } from '@/components/Toolbar';
 import { ExportDialog } from '@/components/ExportDialog';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Save, Download, Upload, FolderOpen } from 'lucide-react';
@@ -50,7 +51,7 @@ export default function LabelerPage() {
   useEffect(() => {
     console.log('=== LABELER PAGE DEBUG ===');
     console.log('Current project:', currentProject?.name);
-    console.log('Current project images count:', currentProject?.images.length);
+    console.log('Current project images count:', currentProject?.images?.length || 0);
     console.log('Current image ID:', currentImageId);
     console.log('Current image found:', currentImage ? `${currentImage.name} (${currentImage.width}x${currentImage.height})` : 'null');
     console.log('Store state:', { currentProject: !!currentProject, currentImageId, isLoading });
@@ -58,22 +59,35 @@ export default function LabelerPage() {
       console.log('Current image URL:', currentImage.url);
     }
     
-    // If no project is loaded, try to load the most recent one from localStorage
+    // If no project is loaded, try to load the most recent one from server
     if (!currentProject && !isLoading) {
-      console.log('No project loaded, checking for recent projects...');
+      console.log('No project loaded, checking for recent projects from server...');
       
-      // Try to get the most recent project from localStorage or IndexedDB
+      // Try to get the most recent project from MongoDB
       const loadRecentProject = async () => {
         try {
-          // Import idb functions dynamically
-          const { getRecentProjects } = await import('@/lib/idb');
-          const recentProjects = await getRecentProjects(1);
-          
-          if (recentProjects.length > 0) {
-            console.log('Found recent project, loading:', recentProjects[0].name);
-            loadProject(recentProjects[0]);
+          console.log('Fetching recent projects from server...');
+          const response = await fetch('/api/projects');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.projects && data.projects.length > 0) {
+              const mostRecentProject = data.projects[0]; // Projects are sorted by updatedAt desc
+              console.log('Found recent project, loading:', mostRecentProject.name);
+              
+              // Normalize project structure
+              const normalizedProject = {
+                ...mostRecentProject,
+                images: mostRecentProject.images || [],
+                bboxes: mostRecentProject.bboxes || [],
+                classes: mostRecentProject.classes || []
+              };
+              
+              loadProject(normalizedProject);
+            } else {
+              console.log('No projects found on server');
+            }
           } else {
-            console.log('No recent projects found');
+            console.warn('Failed to fetch projects from server');
           }
         } catch (error) {
           console.error('Failed to load recent project:', error);
@@ -84,12 +98,47 @@ export default function LabelerPage() {
     }
   }, [currentProject, currentImageId, currentImage, isLoading]);
 
-  // Update project name state when project changes
+  // Update project name state when project changes and explicitly fetch images
   useEffect(() => {
     if (currentProject) {
       setProjectName(currentProject.name);
+      
+      // Explicitly fetch images from server if project has no images yet
+      const fetchImagesIfNeeded = async () => {
+        if (currentProject.images.length === 0) {
+          console.log('Project has no images, fetching from server...');
+          try {
+            // Import the store function dynamically to avoid circular imports
+            const { useLabelStore } = await import('@/lib/store');
+            await useLabelStore.getState().fetchAndMergeServerImages(currentProject.id);
+            console.log('Images fetched from server for project:', currentProject.id);
+          } catch (error) {
+            console.error('Failed to fetch images from server:', error);
+          }
+        } else {
+          console.log('Project already has', currentProject.images.length, 'images loaded');
+        }
+      };
+      
+      fetchImagesIfNeeded();
     }
   }, [currentProject]);
+
+  // Debug images loading
+  useEffect(() => {
+    if (currentProject) {
+      console.log('=== IMAGES DEBUG ===');
+      console.log('Project ID:', currentProject.id);
+      console.log('Project name:', currentProject.name);
+      console.log('Images count:', currentProject.images?.length || 0);
+      console.log('Images:', currentProject.images?.map(img => ({
+        id: img.id,
+        name: img.name,
+        url: img.url,
+        cloudinary: img.cloudinary?.secure_url
+      })));
+    }
+  }, [currentProject?.images]);
 
   // Set first image as current if none selected
   useEffect(() => {
@@ -227,9 +276,9 @@ export default function LabelerPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b bg-card px-4 py-2">
+      <header className="border-b bg-card px-4 py-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link href="/">
@@ -293,25 +342,32 @@ export default function LabelerPage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main content with proper scrolling */}
+      <div className="flex-1 flex min-h-0">
         {/* Left sidebar - Class panel */}
-        <div className="w-80 border-r bg-card flex flex-col">
-          <ClassPanel />
+        <div className="w-80 border-r bg-card flex flex-col flex-shrink-0">
+          <ErrorBoundary>
+            <ClassPanel />
+          </ErrorBoundary>
         </div>
 
-        {/* Main area */}
-        <div className="flex-1 flex flex-col">
-          {/* Toolbar */}
-          <Toolbar />
+        {/* Main area with scroll */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Toolbar - always visible */}
+          <div className="flex-shrink-0">
+            <ErrorBoundary>
+              <Toolbar />
+            </ErrorBoundary>
+          </div>
 
-          {/* Canvas area */}
-          <div 
-            className="flex-1 relative" 
-            ref={canvasContainerRef}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-          >
+          {/* Canvas area - scrollable if needed */}
+          <div className="flex-1 relative min-h-96 overflow-auto">
+            <div 
+              className="min-h-full relative" 
+              ref={canvasContainerRef}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+            >
             {currentImage ? (
               <CanvasStage
                 image={currentImage}
@@ -342,10 +398,15 @@ export default function LabelerPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
 
-          {/* Image strip */}
-          <ImageStrip />
+          {/* Image strip - always visible at bottom */}
+          <div className="flex-shrink-0">
+            <ErrorBoundary>
+              <ImageStrip />
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
 

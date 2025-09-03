@@ -39,39 +39,60 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   const bboxes = getBBoxesForImage(image.id);
   const selectedClass = currentProject?.classes.find(c => c.id === toolState.selectedClassId);
 
-  // Load image
+  // Load image with fallback handling
   useEffect(() => {
-    console.log('Loading image:', image.name, 'url:', image.url);
-    
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-      console.log('Image loaded successfully:', img.width, 'x', img.height);
-      setKonvaImage(img);
-      imageRef.current = img;
+    const loadImageWithFallback = () => {
+      // Determine the best image source with priority order:
+      // 1. Cloudinary URL (most reliable)
+      // 2. Generic URL field
+      // 3. Blob URL (fallback, but likely invalid after refresh)
+      const primarySrc = image.cloudinary?.secure_url || image.url;
+      const fallbackSrc = image.blobUrl;
       
-      // Calculate initial scale to fit image in container
-      const scaleX = containerWidth / img.width;
-      const scaleY = containerHeight / img.height;
-      const scale = Math.min(scaleX, scaleY, 1); // Don't scale up
+      console.log('Loading image:', image.name, 'url:', primarySrc);
       
-      console.log('Setting viewport with scale:', scale);
-      setViewport({
-        scale,
-        x: (containerWidth - img.width * scale) / 2,
-        y: (containerHeight - img.height * scale) / 2,
-        width: containerWidth,
-        height: containerHeight,
-      });
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        console.log('Image loaded successfully:', img.width, 'x', img.height);
+        setKonvaImage(img);
+        imageRef.current = img;
+        
+        // Calculate initial scale to fit image in container
+        const scaleX = containerWidth / img.width;
+        const scaleY = containerHeight / img.height;
+        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up
+        
+        console.log('Setting viewport with scale:', scale);
+        setViewport({
+          scale,
+          x: (containerWidth - img.width * scale) / 2,
+          y: (containerHeight - img.height * scale) / 2,
+          width: containerWidth,
+          height: containerHeight,
+        });
+      };
+      
+      img.onerror = (e) => {
+        console.error('Failed to load image:', e);
+        console.error('Image src:', img.src);
+        
+        // Try fallback if available and different from current src
+        if (fallbackSrc && img.src !== fallbackSrc) {
+          console.log('Trying fallback URL:', fallbackSrc);
+          img.src = fallbackSrc;
+        } else {
+          console.error('No more fallback options available for image:', image.name);
+          setKonvaImage(null);
+        }
+      };
+      
+      // Use primary source first
+      img.src = primarySrc;
     };
     
-    img.onerror = (e) => {
-      console.error('Failed to load image:', e);
-      console.error('Image src:', image.url);
-    };
-    
-    img.src = image.url;
+    loadImageWithFallback();
 
     return () => {
       if (imageRef.current) {
@@ -79,7 +100,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         imageRef.current.onerror = null;
       }
     };
-  }, [image.url, containerWidth, containerHeight, setViewport]);
+  }, [image.cloudinary?.secure_url, image.url, image.blobUrl, containerWidth, containerHeight, setViewport]);
 
   // Handle transformer selection
   useEffect(() => {

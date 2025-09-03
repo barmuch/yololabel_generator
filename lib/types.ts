@@ -44,6 +44,9 @@ export type Project = {
   images: ImageItem[];
   bboxes: BBox[];
   classes: ClassDef[];
+  // Server-provided counts (from API)
+  imageCount?: number;
+  annotationCount?: number;
 };
 
 export type ExportOptions = {

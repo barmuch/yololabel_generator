@@ -4,6 +4,9 @@ import { ImageItem, BBox, ClassDef, Project, ToolState, ViewportState, ExportOpt
 import { generateRandomColor } from './utils';
 import { saveProject as saveProjectToIDB, loadProject as loadProjectFromIDB } from './idb';
 
+// Track which projects we've fetched server images for to avoid repeated requests
+const fetchedProjectImages = new Set<string>();
+
 interface LabelStore {
   // Project state
   currentProject: Project | null;
@@ -57,6 +60,16 @@ interface LabelStore {
   clearAll: () => void;
   saveToIndexedDB: () => Promise<void>;
   loadFromIndexedDB: (projectId: string) => Promise<void>;
+  // Fetch and merge server-stored images (Cloudinary metadata persisted in MongoDB)
+  fetchAndMergeServerImages: (projectId?: string) => Promise<void>;
+  // Save annotations for specific image to server
+  saveAnnotationsToServer: (imageId: string) => Promise<void>;
+  // Individual annotation management
+  saveAnnotationToServer: (bboxId: string) => Promise<void>;
+  updateAnnotationOnServer: (bboxId: string) => Promise<void>;
+  deleteAnnotationFromServer: (bboxId: string, imageId: string, projectId: string) => Promise<void>;
+  // Load annotations for project from server
+  loadAnnotationsFromServer: (projectId: string) => Promise<void>;
 }
 
 const defaultToolState: ToolState = {
@@ -132,12 +145,44 @@ export const useLabelStore = create<LabelStore>()(
     loadProject: (project: Project) => {
       console.log('Loading project into store:', project.name, 'with', project.images.length, 'images');
       
+      // Normalize images to ensure each has a usable `url` so thumbnails render.
+      try {
+        project.images = (project.images || []).map((img) => {
+          // If url is missing but cloudinary secure url exists, use it.
+          if (!img.url) {
+            img.url = img.cloudinary?.secure_url ?? img.blobUrl ?? '';
+            if (img.url) {
+              console.log('Normalized image.url for', img.name, '->', img.url);
+            }
+          }
+          return img;
+        });
+      } catch (e) {
+        console.warn('Error normalizing project images on load:', e);
+      }
+
       set((state) => {
         state.currentProject = project;
         state.currentImageId = project.images.length > 0 ? project.images[0].id : null;
       });
       
       console.log('Project loaded, currentImageId set to:', project.images.length > 0 ? project.images[0].id : null);
+      
+      // Fetch images from MongoDB after loading project
+      console.log('Fetching images from MongoDB for project:', project.id);
+      
+      // Clear any previous fetch tracking for this project to ensure fresh fetch
+      fetchedProjectImages.delete(project.id);
+      
+      // Fetch images and annotations from server
+      const fetchOperations = async () => {
+        await get().fetchAndMergeServerImages(project.id);
+        await get().loadAnnotationsFromServer(project.id);
+      };
+      
+      fetchOperations().catch(error => {
+        console.error('Error fetching project data from server:', error);
+      });
     },
 
     updateProjectName: (name: string) => {
@@ -152,6 +197,14 @@ export const useLabelStore = create<LabelStore>()(
     // Image management
     addImages: async (files: File[]) => {
       console.log('addImages called with files:', files.map(f => f.name));
+      const currentProject = get().currentProject;
+      
+      if (!currentProject) {
+        console.error('No project loaded');
+        alert('Please load a project first');
+        return;
+      }
+      
       set((state) => { state.isLoading = true; });
 
       try {
@@ -169,14 +222,15 @@ export const useLabelStore = create<LabelStore>()(
           }
 
           try {
-            console.log(`📤 Uploading ${file.name} to Cloudinary...`);
+            console.log(`📤 Uploading ${file.name} via complete upload flow...`);
             
             // Create FormData for upload
             const formData = new FormData();
             formData.append('file', file);
+            formData.append('projectId', currentProject.id);
 
-            // Upload to Cloudinary via API route
-            const response = await fetch('/api/upload', {
+            // Upload via complete upload flow (Cloudinary + MongoDB)
+            const response = await fetch('/api/upload-complete', {
               method: 'POST',
               body: formData,
             });
@@ -185,90 +239,65 @@ export const useLabelStore = create<LabelStore>()(
               throw new Error(`Upload failed: ${response.statusText}`);
             }
 
-            const uploadResult = await response.json();
+            const result = await response.json();
             
-            if (!uploadResult.success) {
-              throw new Error(uploadResult.error || 'Upload failed');
+            if (!result.success) {
+              throw new Error(result.error || 'Upload failed');
             }
 
-            console.log(`✅ Cloudinary upload success for ${file.name}:`, uploadResult);
+            console.log(`✅ Complete upload success for ${file.name}:`, result);
 
             const imageItem: ImageItem = {
-              id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              id: result.imageMetadata.id,
               name: file.name,
-              width: uploadResult.width,
-              height: uploadResult.height,
-              url: uploadResult.url, // Use Cloudinary URL as main URL
+              width: result.width,
+              height: result.height,
+              url: result.url,
               cloudinary: {
-                public_id: uploadResult.public_id,
-                secure_url: uploadResult.url,
-                width: uploadResult.width,
-                height: uploadResult.height,
-                format: uploadResult.format,
-                bytes: uploadResult.bytes,
+                public_id: result.public_id,
+                secure_url: result.url,
+                width: result.width,
+                height: result.height,
+                format: result.format,
+                bytes: result.bytes,
               },
               status: "new"
             };
 
             newImages.push(imageItem);
             successCount++;
-            console.log('Created Cloudinary image item:', imageItem);
+            console.log('Created image item:', imageItem);
 
           } catch (error) {
-            console.error(`❌ Failed to upload ${file.name} to Cloudinary:`, error);
+            console.error(`❌ Failed to upload ${file.name}:`, error);
             errorCount++;
-            
-            // Fallback to blob URL if Cloudinary fails
-            try {
-              console.log(`🔄 Falling back to blob URL for ${file.name}`);
-              
-              // Create object URL for the image
-              const blobUrl = URL.createObjectURL(file);
-              console.log('Created blob URL for', file.name, ':', blobUrl);
-
-              // Get image dimensions
-              const { width, height } = await getImageDimensions(blobUrl);
-              console.log('Image dimensions for', file.name, ':', width, 'x', height);
-
-              const imageItem: ImageItem = {
-                id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                name: file.name,
-                width,
-                height,
-                url: blobUrl, // Use blob URL as fallback
-                blobUrl,
-                status: 'new',
-              };
-
-              console.log('Created fallback image item:', imageItem);
-              newImages.push(imageItem);
-              
-            } catch (fallbackError) {
-              console.error(`❌ Fallback also failed for ${file.name}:`, fallbackError);
-            }
           }
         }
 
-        console.log(`📊 Upload summary: ${successCount} Cloudinary, ${newImages.length - successCount} fallback, ${errorCount} failed`);
+        console.log(`📊 Upload summary: ${successCount} successful, ${errorCount} failed`);
         console.log('Adding', newImages.length, 'images to project');
 
-        set((state) => {
-          if (state.currentProject) {
-            state.currentProject.images.push(...newImages);
-            state.currentProject.updatedAt = Date.now();
-            
-            // Set first image as current if none selected
-            if (!state.currentImageId && newImages.length > 0) {
-              console.log('Setting first image as current:', newImages[0].id);
-              state.currentImageId = newImages[0].id;
+        if (newImages.length > 0) {
+          set((state) => {
+            if (state.currentProject) {
+              state.currentProject.images.push(...newImages);
+              state.currentProject.updatedAt = Date.now();
+              
+              // Set first image as current if none selected
+              if (!state.currentImageId && newImages.length > 0) {
+                console.log('Setting first image as current:', newImages[0].id);
+                state.currentImageId = newImages[0].id;
+              }
             }
-          }
-        });
+          });
+        }
 
-        // Auto-save after adding images
-        get().saveToIndexedDB();
+        if (errorCount > 0) {
+          alert(`Upload completed with ${errorCount} errors. Check console for details.`);
+        }
       } catch (error) {
         console.error('Error adding images:', error);
+        alert('Failed to upload images: ' + (error instanceof Error ? error.message : 'Unknown error'));
       } finally {
         set((state) => { state.isLoading = false; });
       }
@@ -447,27 +476,43 @@ export const useLabelStore = create<LabelStore>()(
         }
       });
 
+      // Auto-save individual annotation to server
+      get().saveAnnotationToServer(id);
+
       return id;
     },
 
     updateBBox: (bboxId: string, updates: Partial<BBox>) => {
+      let affectedImageId: string | undefined;
+      
       set((state) => {
         if (state.currentProject) {
           const bboxIndex = state.currentProject.bboxes.findIndex(bbox => bbox.id === bboxId);
           if (bboxIndex >= 0) {
+            affectedImageId = state.currentProject.bboxes[bboxIndex].imageId;
             Object.assign(state.currentProject.bboxes[bboxIndex], updates);
             state.currentProject.updatedAt = Date.now();
           }
         }
       });
+
+      // Auto-save individual annotation update to server
+      if (affectedImageId) {
+        get().updateAnnotationOnServer(bboxId);
+      }
     },
 
     removeBBox: (bboxId: string) => {
+      let affectedImageId: string | undefined;
+      let affectedProjectId: string | undefined;
+      
       set((state) => {
         if (state.currentProject) {
           const bboxIndex = state.currentProject.bboxes.findIndex(bbox => bbox.id === bboxId);
           if (bboxIndex >= 0) {
             const bbox = state.currentProject.bboxes[bboxIndex];
+            affectedImageId = bbox.imageId;
+            affectedProjectId = state.currentProject.id;
             state.currentProject.bboxes.splice(bboxIndex, 1);
             
             // Update image status if no more bboxes
@@ -488,11 +533,19 @@ export const useLabelStore = create<LabelStore>()(
           }
         }
       });
+
+      // Auto-delete annotation from server
+      if (affectedImageId && affectedProjectId) {
+        get().deleteAnnotationFromServer(bboxId, affectedImageId, affectedProjectId);
+      }
     },
 
     getBBoxesForImage: (imageId: string) => {
       const project = get().currentProject;
-      return project ? project.bboxes.filter(bbox => bbox.imageId === imageId) : [];
+      if (!project || !project.bboxes || !Array.isArray(project.bboxes)) {
+        return [];
+      }
+      return project.bboxes.filter(bbox => bbox?.imageId === imageId);
     },
 
     // Tool state
@@ -558,6 +611,12 @@ export const useLabelStore = create<LabelStore>()(
         state.toolState = { ...defaultToolState };
         state.viewport = { ...defaultViewport };
       });
+      // clear fetched tracking so future projects can re-fetch images
+      try {
+        fetchedProjectImages.clear();
+      } catch (e) {
+        /* noop */
+      }
     },
 
     saveToIndexedDB: async () => {
@@ -606,6 +665,424 @@ export const useLabelStore = create<LabelStore>()(
         console.error('Error loading from IndexedDB:', error);
       } finally {
         set((state) => { state.isLoading = false; });
+      }
+    },
+
+    fetchAndMergeServerImages: async (projectId?: string) => {
+      let pid: string | undefined;
+      try {
+        pid = projectId || get().currentProject?.id;
+        if (!pid) return;
+
+        // Avoid repeated fetches for same project. Mark as fetching immediately
+        // so concurrent calls won't each start network requests.
+        if (fetchedProjectImages.has(pid)) {
+          // already fetched (or currently fetching)
+          console.log('[fetchAndMergeServerImages] Already fetched/fetching project:', pid);
+          return;
+        }
+
+        // mark as fetching right away
+        fetchedProjectImages.add(pid);
+
+        console.log('[fetchAndMergeServerImages] Fetching server-stored images for project:', pid);
+
+        const res = await fetch(`/api/images?projectId=${encodeURIComponent(pid)}`);
+        if (!res.ok) {
+          // allow future retries
+          fetchedProjectImages.delete(pid);
+          console.warn('[fetchAndMergeServerImages] Failed to fetch server images:', await res.text());
+          return;
+        }
+
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.images)) {
+          // allow future retries
+          fetchedProjectImages.delete(pid);
+          console.warn('[fetchAndMergeServerImages] No images returned from server:', data);
+          return;
+        }
+
+        const serverImages = data.images as any[];
+        console.log(`[fetchAndMergeServerImages] Server returned ${serverImages.length} images for project ${pid}:`);
+        
+        if (serverImages.length > 0) {
+          console.log('[fetchAndMergeServerImages] First image sample:', {
+            publicId: serverImages[0].publicId,
+            url: serverImages[0].url,
+            originalName: serverImages[0].originalName,
+            width: serverImages[0].width,
+            height: serverImages[0].height
+          });
+        }
+
+        set((state) => {
+          if (!state.currentProject) {
+            console.warn('[fetchAndMergeServerImages] No current project in state!');
+            return;
+          }
+
+          console.log(`[fetchAndMergeServerImages] Current project has ${state.currentProject.images.length} images before merge`);
+
+          // For each server image, if not already in project, add it
+          let addedCount = 0;
+          for (const si of serverImages) {
+            console.log(`[fetchAndMergeServerImages] Processing server image:`, {
+              publicId: si.publicId,
+              url: si.url,
+              originalName: si.originalName,
+              width: si.width,
+              height: si.height,
+              annotations: si.annotations ? si.annotations.length : 0
+            });
+
+            // Avoid duplicates by publicId or url
+            const existingImageIndex = state.currentProject.images.findIndex(img => 
+              img.cloudinary?.public_id === si.publicId || img.url === si.url
+            );
+            
+            if (existingImageIndex >= 0) {
+              console.log(`[fetchAndMergeServerImages] Image already exists:`, si.publicId);
+              continue;
+            }
+
+            const imageItem: any = {
+              id: si.id || si._id || si.publicId, // Use server ID or fallback to publicId
+              name: si.originalName || si.publicId,
+              width: si.width || 0,
+              height: si.height || 0,
+              url: si.url,
+              cloudinary: {
+                public_id: si.publicId,
+                secure_url: si.url,
+                width: si.width || 0,
+                height: si.height || 0,
+                format: si.format || '',
+                bytes: si.bytes || 0,
+              },
+              status: 'new', // Status will be updated when annotations are loaded
+            };
+
+            console.log(`[fetchAndMergeServerImages] Adding new image to project:`, imageItem);
+            state.currentProject.images.push(imageItem);
+            addedCount++;
+          }
+
+          console.log(`[fetchAndMergeServerImages] Added ${addedCount} new images. Project now has ${state.currentProject.images.length} total images`);
+          state.currentProject.updatedAt = Date.now();
+        });
+
+        console.log('[fetchAndMergeServerImages] Merged', serverImages.length, 'server images into project');
+      } catch (error) {
+        // If an error happened, allow future retries by clearing the flag
+        if (pid) {
+          try { fetchedProjectImages.delete(pid); } catch (e) { /* noop */ }
+        }
+        console.error('[fetchAndMergeServerImages] Error fetching/merging server images:', error);
+      }
+    },
+
+    saveAnnotationsToServer: async (imageId: string) => {
+      try {
+        const state = get();
+        if (!state.currentProject) {
+          console.warn('No current project to save annotations for');
+          return;
+        }
+
+        // Find the image
+        const image = state.currentProject.images.find(img => img.id === imageId);
+        if (!image || !image.cloudinary?.public_id) {
+          console.warn('Image not found or missing cloudinary public_id:', imageId);
+          return;
+        }
+
+        // Get all annotations for this image
+        const annotations = state.currentProject.bboxes
+          .filter(bbox => bbox.imageId === imageId);
+
+        console.log(`Saving ${annotations.length} annotations for image ${imageId} to server`);
+
+        // First, check if image metadata exists in server
+        const checkResponse = await fetch(`/api/images?projectId=${encodeURIComponent(state.currentProject.id)}`);
+        let imageExists = false;
+        
+        if (checkResponse.ok) {
+          const checkData = await checkResponse.json();
+          if (checkData.success && checkData.images) {
+            imageExists = checkData.images.some((img: any) => 
+              img.publicId === image.cloudinary?.public_id || img.public_id === image.cloudinary?.public_id
+            );
+          }
+        }
+
+        if (!imageExists) {
+          // Save image metadata first
+          console.log('Image metadata not found on server, saving image metadata first...');
+          const imageMetadata = {
+            projectId: state.currentProject.id,
+            public_id: image.cloudinary.public_id,
+            secure_url: image.cloudinary.secure_url,
+            width: image.width,
+            height: image.height,
+            format: image.cloudinary.format,
+            bytes: image.cloudinary.bytes,
+            originalName: image.name,
+          };
+
+          const saveImageResponse = await fetch('/api/images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(imageMetadata),
+          });
+
+          if (!saveImageResponse.ok) {
+            console.warn('Failed to save image metadata to server:', await saveImageResponse.text());
+            return;
+          }
+        }
+
+        // Now save each annotation individually using the annotations API
+        for (const bbox of annotations) {
+          const annotationData = {
+            id: bbox.id,
+            projectId: state.currentProject.id,
+            imageId: imageId,
+            bbox: {
+              x: bbox.x,
+              y: bbox.y,
+              width: bbox.w,
+              height: bbox.h,
+            },
+            classId: bbox.classId,
+            className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+            confidence: 1.0,
+            yolo: {
+              x: (bbox.x + bbox.w / 2) / image.width,
+              y: (bbox.y + bbox.h / 2) / image.height,
+              width: bbox.w / image.width,
+              height: bbox.h / image.height,
+            },
+            createdAt: Date.now(),
+            createdBy: 'user'
+          };
+
+          const saveResponse = await fetch('/api/annotations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(annotationData),
+          });
+
+          if (!saveResponse.ok) {
+            console.warn(`Failed to save annotation ${bbox.id}:`, await saveResponse.text());
+          } else {
+            console.log(`✅ Annotation ${bbox.id} saved successfully`);
+          }
+        }
+
+        console.log('All annotations processed');
+      } catch (error) {
+        console.error('Error saving annotations to server:', error);
+      }
+    },
+
+    saveAnnotationToServer: async (bboxId: string) => {
+      try {
+        const state = get();
+        if (!state.currentProject) {
+          console.warn('No current project to save annotation for');
+          return;
+        }
+
+        // Find the bbox
+        const bbox = state.currentProject.bboxes.find(b => b.id === bboxId);
+        if (!bbox) {
+          console.warn('Bbox not found:', bboxId);
+          return;
+        }
+
+        // Find the image
+        const image = state.currentProject.images.find(img => img.id === bbox.imageId);
+        if (!image || !image.cloudinary?.public_id) {
+          console.warn('Image not found or missing cloudinary public_id:', bbox.imageId);
+          return;
+        }
+
+        const annotationData = {
+          id: bbox.id,
+          projectId: state.currentProject.id,
+          imageId: bbox.imageId,
+          bbox: {
+            x: bbox.x,
+            y: bbox.y,
+            width: bbox.w,
+            height: bbox.h,
+          },
+          classId: bbox.classId,
+          className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+          confidence: 1.0,
+          yolo: {
+            x: (bbox.x + bbox.w / 2) / image.width,
+            y: (bbox.y + bbox.h / 2) / image.height,
+            width: bbox.w / image.width,
+            height: bbox.h / image.height,
+          },
+          createdAt: Date.now(),
+          createdBy: 'user'
+        };
+
+        const response = await fetch('/api/annotations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(annotationData),
+        });
+
+        if (response.ok) {
+          console.log(`✅ Annotation ${bbox.id} saved successfully`);
+        } else {
+          console.warn(`Failed to save annotation ${bbox.id}:`, await response.text());
+        }
+      } catch (error) {
+        console.error('Error saving annotation to server:', error);
+      }
+    },
+
+    updateAnnotationOnServer: async (bboxId: string) => {
+      try {
+        const state = get();
+        if (!state.currentProject) {
+          console.warn('No current project to update annotation for');
+          return;
+        }
+
+        // Find the bbox
+        const bbox = state.currentProject.bboxes.find(b => b.id === bboxId);
+        if (!bbox) {
+          console.warn('Bbox not found:', bboxId);
+          return;
+        }
+
+        // Find the image
+        const image = state.currentProject.images.find(img => img.id === bbox.imageId);
+        if (!image || !image.cloudinary?.public_id) {
+          console.warn('Image not found or missing cloudinary public_id:', bbox.imageId);
+          return;
+        }
+
+        const updateData = {
+          id: bbox.id,
+          projectId: state.currentProject.id,
+          imageId: bbox.imageId,
+          bbox: {
+            x: bbox.x,
+            y: bbox.y,
+            width: bbox.w,
+            height: bbox.h,
+          },
+          classId: bbox.classId,
+          className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+          confidence: 1.0,
+          yolo: {
+            x: (bbox.x + bbox.w / 2) / image.width,
+            y: (bbox.y + bbox.h / 2) / image.height,
+            width: bbox.w / image.width,
+            height: bbox.h / image.height,
+          },
+          updatedAt: Date.now()
+        };
+
+        const response = await fetch('/api/annotations', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        });
+
+        if (response.ok) {
+          console.log(`✅ Annotation ${bbox.id} updated successfully`);
+        } else {
+          console.warn(`Failed to update annotation ${bbox.id}:`, await response.text());
+        }
+      } catch (error) {
+        console.error('Error updating annotation on server:', error);
+      }
+    },
+
+    deleteAnnotationFromServer: async (bboxId: string, imageId: string, projectId: string) => {
+      try {
+        const response = await fetch(`/api/annotations?annotationId=${encodeURIComponent(bboxId)}&imageId=${encodeURIComponent(imageId)}&projectId=${encodeURIComponent(projectId)}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          console.log(`✅ Annotation ${bboxId} deleted successfully`);
+        } else {
+          console.warn(`Failed to delete annotation ${bboxId}:`, await response.text());
+        }
+      } catch (error) {
+        console.error('Error deleting annotation from server:', error);
+      }
+    },
+
+    loadAnnotationsFromServer: async (projectId: string) => {
+      try {
+        console.log('🔍 Loading annotations from server for project:', projectId);
+        
+        const response = await fetch(`/api/annotations?projectId=${encodeURIComponent(projectId)}`);
+        
+        if (!response.ok) {
+          console.warn('Failed to load annotations from server:', await response.text());
+          return;
+        }
+        
+        const data = await response.json();
+        if (!data.success || !data.annotations) {
+          console.warn('No annotations data received from server');
+          return;
+        }
+        
+        const serverAnnotations = data.annotations;
+        console.log(`📊 Found ${serverAnnotations.length} annotations on server for project ${projectId}`);
+        
+        set((state) => {
+          if (!state.currentProject || state.currentProject.id !== projectId) {
+            console.warn('Current project mismatch when loading annotations');
+            return;
+          }
+          
+          // Clear existing bboxes for this project to avoid duplicates
+          state.currentProject.bboxes = [];
+          
+          // Convert server annotations to bboxes
+          for (const annotation of serverAnnotations) {
+            // Find the image for this annotation
+            const image = state.currentProject.images.find(img => img.id === annotation.imageId);
+            if (!image) {
+              console.warn('Image not found for annotation:', annotation.imageId);
+              continue;
+            }
+            
+            // Convert annotation to bbox format
+            const bbox: BBox = {
+              id: annotation.id,
+              imageId: annotation.imageId,
+              classId: annotation.classId,
+              x: annotation.bbox.x,
+              y: annotation.bbox.y,
+              w: annotation.bbox.width,
+              h: annotation.bbox.height,
+            };
+            
+            state.currentProject.bboxes.push(bbox);
+            
+            // Update image status
+            image.status = 'labeled';
+          }
+          
+          console.log(`✅ Loaded ${state.currentProject.bboxes.length} annotations into project`);
+        });
+        
+      } catch (error) {
+        console.error('Error loading annotations from server:', error);
       }
     },
   }))

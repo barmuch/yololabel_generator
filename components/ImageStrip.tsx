@@ -22,9 +22,21 @@ export function ImageStrip() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const images = currentProject?.images || [];
-  const currentIndex = currentImageId 
+  const currentIndex = currentImageId && images.length > 0
     ? images.findIndex(img => img.id === currentImageId)
     : -1;
+
+  // Debug images in ImageStrip
+  useEffect(() => {
+    console.log('=== IMAGE STRIP DEBUG ===');
+    console.log('Current project:', currentProject?.name);
+    console.log('Images count:', images.length);
+    console.log('Current image ID:', currentImageId);
+    console.log('Current index:', currentIndex);
+    if (images.length > 0) {
+      console.log('First image:', images[0].name, images[0].url);
+    }
+  }, [currentProject, images, currentImageId, currentIndex]);
 
   // Auto-scroll to current image
   useEffect(() => {
@@ -71,26 +83,28 @@ export function ImageStrip() {
   }, [currentIndex, images.length, handlePrevious, handleNext]);
 
   const getImageStatus = (image: ImageItem) => {
+    if (!image?.id) return 'new';
     const bboxes = getBBoxesForImage(image.id);
-    return bboxes.length > 0 ? 'labeled' : 'new';
+    return (bboxes && bboxes.length > 0) ? 'labeled' : 'new';
   };
 
-  if (images.length === 0) {
+  if (!images || images.length === 0) {
     return (
-      <div className="h-32 flex items-center justify-center border-t bg-muted/50">
+      <div className="h-40 flex items-center justify-center border-t bg-muted/30">
         <div className="text-center text-muted-foreground">
-          <ImageIcon className="w-8 h-8 mx-auto mb-2" />
-          <p className="text-sm">No images loaded</p>
+          <ImageIcon className="w-12 h-12 mx-auto mb-3" />
+          <p className="text-base font-medium">No images loaded</p>
+          <p className="text-sm">Upload images to start labeling</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="border-t bg-background">
+    <div className="border-t bg-background min-h-36">
       {/* Navigation controls */}
-      <div className="flex items-center justify-between p-2 border-b bg-muted/50">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between p-3 border-b bg-muted/30">
+        <div className="flex items-center space-x-3">
           <Button
             size="sm"
             variant="outline"
@@ -100,7 +114,7 @@ export function ImageStrip() {
             <ChevronLeft className="w-4 h-4" />
           </Button>
           
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm font-medium text-foreground">
             {currentIndex + 1} of {images.length}
           </span>
           
@@ -114,14 +128,14 @@ export function ImageStrip() {
           </Button>
         </div>
 
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground font-medium">
           Use ← → keys to navigate
         </div>
       </div>
 
       {/* Image thumbnails */}
-      <ScrollArea ref={scrollRef} className="h-24">
-        <div className="flex space-x-2 p-2">
+      <ScrollArea ref={scrollRef} className="h-32">
+        <div className="flex space-x-3 p-3 min-w-max">
           {images.map((image) => {
             const isSelected = image.id === currentImageId;
             const status = getImageStatus(image);
@@ -133,22 +147,81 @@ export function ImageStrip() {
                 data-image-id={image.id}
                 className={`
                   group relative flex-shrink-0 cursor-pointer rounded-lg overflow-hidden
-                  border-2 transition-all
+                  border-2 transition-all duration-200 shadow-sm hover:shadow-md
                   ${isSelected 
-                    ? 'border-primary shadow-md' 
-                    : 'border-transparent hover:border-muted-foreground/50'
+                    ? 'border-primary shadow-lg ring-2 ring-primary/20 scale-105' 
+                    : 'border-border hover:border-primary/50 hover:scale-102'
                   }
                 `}
                 onClick={() => setCurrentImage(image.id)}
               >
                 {/* Thumbnail */}
-                <div className="relative w-20 h-16 bg-muted">
-                  <img
-                    src={image.url}
-                    alt={image.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
+                <div className="relative w-28 h-20 bg-muted">
+                  {/* Prefer Cloudinary URL, fall back to generic url, then blobUrl */}
+                  {(() => {
+                    const src = image.cloudinary?.secure_url ?? image.url ?? image.blobUrl ?? '';
+                    
+                    // Debug logging for thumbnail src
+                    if (!src) {
+                      console.warn(`[ImageStrip] No src available for image ${image.name}:`, {
+                        cloudinary_secure_url: image.cloudinary?.secure_url,
+                        url: image.url,
+                        blobUrl: image.blobUrl,
+                        image
+                      });
+                    } else {
+                      console.log(`[ImageStrip] Using src for ${image.name}:`, src);
+                    }
+                    
+                    if (!src) {
+                      // Show placeholder if no image source available
+                      return (
+                        <div className="w-full h-full flex items-center justify-center bg-muted border-2 border-dashed border-muted-foreground/25">
+                          <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <img
+                        src={src}
+                        alt={image.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        crossOrigin="anonymous"
+                        onLoad={() => {
+                          console.log(`[ImageStrip] ✅ Successfully loaded thumbnail for ${image.name}`);
+                        }}
+                        onError={(e) => {
+                          console.error(`[ImageStrip] ❌ Failed to load thumbnail for ${image.name} with src:`, src);
+                          // Try other available URLs as fallbacks
+                          const el = e.currentTarget as HTMLImageElement;
+                          const fallbacks = [
+                            image.url,
+                            image.blobUrl,
+                            image.cloudinary?.secure_url
+                          ].filter(url => url && url !== el.src);
+                          
+                          const nextFallback = fallbacks[0];
+                          console.log(`[ImageStrip] Trying fallback for ${image.name}:`, nextFallback);
+                          
+                          if (nextFallback) {
+                            el.src = nextFallback;
+                          } else {
+                            // Show error placeholder
+                            el.style.display = 'none';
+                            const parent = el.parentElement;
+                            if (parent && !parent.querySelector('.error-placeholder')) {
+                              const errorDiv = document.createElement('div');
+                              errorDiv.className = 'error-placeholder w-full h-full flex items-center justify-center bg-red-50 border-2 border-red-200';
+                              errorDiv.innerHTML = '<span class="text-red-500 text-xs">Error</span>';
+                              parent.appendChild(errorDiv);
+                            }
+                          }
+                        }}
+                      />
+                    );
+                  })()}
                   
                   {/* Status badge */}
                   <Badge
@@ -180,8 +253,8 @@ export function ImageStrip() {
                 </div>
 
                 {/* Image info tooltip */}
-                <div className="absolute bottom-0 left-0 right-0 bg-black/75 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="truncate">{image.name}</div>
+                <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-b-lg">
+                  <div className="truncate font-medium">{image.name}</div>
                   <div className="text-xs opacity-75">
                     {image.width} × {image.height}
                   </div>

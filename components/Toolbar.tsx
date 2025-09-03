@@ -11,7 +11,6 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
-  Save,
   Download,
   Grid3X3,
   Eye,
@@ -28,7 +27,6 @@ export function Toolbar() {
     viewport,
     setViewport,
     resetViewport,
-    saveToIndexedDB,
     isSaving,
     currentProject,
     getBBoxesForImage,
@@ -36,7 +34,7 @@ export function Toolbar() {
   } = useLabelStore();
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
-  const bboxCount = currentImageId ? getBBoxesForImage(currentImageId).length : 0;
+  const bboxCount = currentImageId && currentProject ? getBBoxesForImage(currentImageId)?.length || 0 : 0;
   const selectedClass = currentProject?.classes.find(c => c.id === toolState.selectedClassId);
 
   const handleZoomIn = () => {
@@ -47,14 +45,6 @@ export function Toolbar() {
   const handleZoomOut = () => {
     const newScale = Math.max(viewport.scale / 1.2, 0.1);
     setViewport({ scale: newScale });
-  };
-
-  const handleSave = async () => {
-    try {
-      await saveToIndexedDB();
-    } catch (error) {
-      console.error('Failed to save:', error);
-    }
   };
 
   const getModeIcon = (mode: CanvasMode) => {
@@ -84,10 +74,10 @@ export function Toolbar() {
   };
 
   return (
-    <div className="border-b bg-background p-2">
-      <div className="flex items-center justify-between">
+    <div className="border-b bg-background p-2 overflow-x-auto">
+      <div className="flex items-center justify-between min-w-max">
         {/* Left section - Tools */}
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 flex-shrink-0">
           {/* Mode buttons */}
           {(['select', 'draw', 'pan'] as CanvasMode[]).map((mode) => (
             <Button
@@ -138,11 +128,11 @@ export function Toolbar() {
         </div>
 
         {/* Center section - Current selection info */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 flex-shrink-0 mx-4">
           {/* Current class */}
           {selectedClass && (
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-muted-foreground">Class:</span>
+              <span className="text-sm text-muted-foreground hidden lg:inline">Class:</span>
               <Badge 
                 variant="outline" 
                 className="flex items-center space-x-1"
@@ -153,7 +143,7 @@ export function Toolbar() {
                   style={{ backgroundColor: selectedClass.color }}
                 />
                 <span>{selectedClass.name}</span>
-                <span className="text-xs opacity-70">({selectedClass.id})</span>
+                <span className="text-xs opacity-70 hidden md:inline">({selectedClass.id})</span>
               </Badge>
             </div>
           )}
@@ -161,7 +151,7 @@ export function Toolbar() {
           {/* Bbox count */}
           {currentImage && (
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-muted-foreground">Annotations:</span>
+              <span className="text-sm text-muted-foreground hidden lg:inline">Annotations:</span>
               <Badge variant={bboxCount > 0 ? 'default' : 'secondary'}>
                 {bboxCount}
               </Badge>
@@ -170,38 +160,27 @@ export function Toolbar() {
 
           {/* Image info */}
           {currentImage && (
-            <div className="hidden md:flex items-center space-x-2 text-sm text-muted-foreground">
+            <div className="hidden lg:flex items-center space-x-2 text-sm text-muted-foreground">
               <span>{currentImage.width} × {currentImage.height}</span>
             </div>
           )}
         </div>
 
-        {/* Right section - Actions */}
-        <div className="flex items-center space-x-1">
-          {/* Save button */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleSave}
-            disabled={isSaving || !currentProject}
-            className="flex items-center space-x-1"
-          >
-            <Save className="w-4 h-4" />
-            <span className="hidden sm:inline">
-              {isSaving ? 'Saving...' : 'Save'}
-            </span>
-          </Button>
-
-          {/* Export button */}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!currentProject || !currentProject.images.length}
-            className="flex items-center space-x-1"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Export</span>
-          </Button>
+        {/* Right section - Status */}
+        <div className="flex items-center space-x-1 flex-shrink-0">
+          {/* Auto-save status indicator */}
+          {isSaving && (
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span>Auto-saving...</span>
+            </div>
+          )}
+          {!isSaving && currentProject && (
+            <div className="flex items-center space-x-2 text-sm text-green-600">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>Saved</span>
+            </div>
+          )}
         </div>
       </div>
 

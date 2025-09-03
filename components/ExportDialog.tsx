@@ -43,6 +43,7 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'single' | 'classes' | 'dataset' | 'yaml'>('single');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
   const allBboxes = currentProject?.bboxes || [];
@@ -94,12 +95,15 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
   const handleExportDataset = async () => {
     if (!currentProject || !currentProject.images.length) return;
 
-    // Validate split options
+    // Validate split options and show errors in UI
     const errors = validateSplitOptions(exportOptions);
     if (errors.length > 0) {
-      alert(`Invalid split configuration:\n${errors.join('\n')}`);
+      setValidationErrors(errors);
       return;
     }
+
+    // Clear any previous validation errors
+    setValidationErrors([]);
 
     setIsExporting(true);
     try {
@@ -176,7 +180,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
           <div className="grid grid-cols-2 gap-3">
             <Button
               variant={exportType === 'single' ? 'default' : 'outline'}
-              onClick={() => setExportType('single')}
+              onClick={() => {
+                setExportType('single');
+                setValidationErrors([]); // Clear validation errors when changing export type
+              }}
               disabled={!currentImage}
               className="h-auto p-4 flex flex-col items-center space-y-2"
             >
@@ -191,7 +198,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
 
             <Button
               variant={exportType === 'classes' ? 'default' : 'outline'}
-              onClick={() => setExportType('classes')}
+              onClick={() => {
+                setExportType('classes');
+                setValidationErrors([]); // Clear validation errors when changing export type
+              }}
               disabled={!classes.length}
               className="h-auto p-4 flex flex-col items-center space-y-2"
             >
@@ -206,7 +216,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
 
             <Button
               variant={exportType === 'yaml' ? 'default' : 'outline'}
-              onClick={() => setExportType('yaml')}
+              onClick={() => {
+                setExportType('yaml');
+                setValidationErrors([]); // Clear validation errors when changing export type
+              }}
               disabled={!classes.length}
               className="h-auto p-4 flex flex-col items-center space-y-2"
             >
@@ -221,7 +234,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
 
             <Button
               variant={exportType === 'dataset' ? 'default' : 'outline'}
-              onClick={() => setExportType('dataset')}
+              onClick={() => {
+                setExportType('dataset');
+                setValidationErrors([]); // Clear validation errors when changing export type
+              }}
               disabled={!currentProject.images.length}
               className="h-auto p-4 flex flex-col items-center space-y-2"
             >
@@ -251,7 +267,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
                     min="0"
                     max="100"
                     value={exportOptions.trainSplit}
-                    onChange={(e) => setExportOptions({ trainSplit: Number(e.target.value) })}
+                    onChange={(e) => {
+                      setExportOptions({ trainSplit: Number(e.target.value) });
+                      setValidationErrors([]); // Clear validation errors when user edits
+                    }}
                   />
                 </div>
                 <div>
@@ -261,7 +280,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
                     min="0"
                     max="100"
                     value={exportOptions.valSplit}
-                    onChange={(e) => setExportOptions({ valSplit: Number(e.target.value) })}
+                    onChange={(e) => {
+                      setExportOptions({ valSplit: Number(e.target.value) });
+                      setValidationErrors([]); // Clear validation errors when user edits
+                    }}
                   />
                 </div>
                 <div>
@@ -271,7 +293,10 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
                     min="0"
                     max="100"
                     value={exportOptions.testSplit}
-                    onChange={(e) => setExportOptions({ testSplit: Number(e.target.value) })}
+                    onChange={(e) => {
+                      setExportOptions({ testSplit: Number(e.target.value) });
+                      setValidationErrors([]); // Clear validation errors when user edits
+                    }}
                   />
                 </div>
               </div>
@@ -304,8 +329,26 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
                 <span className="text-sm">Include data.yaml</span>
               </label>
 
+              {/* Validation errors display */}
+              {validationErrors.length > 0 && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center space-x-2 text-red-700 mb-2">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">Validation Errors:</span>
+                  </div>
+                  <ul className="text-sm text-red-600 space-y-1">
+                    {validationErrors.map((error, index) => (
+                      <li key={index} className="flex items-start space-x-1">
+                        <span>•</span>
+                        <span>{error}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Split preview */}
-              {splitPreview && (
+              {splitPreview && validationErrors.length === 0 && (
                 <div className="mt-4 p-3 bg-muted rounded-lg">
                   <div className="text-sm font-medium mb-2">Split Preview:</div>
                   <div className="grid grid-cols-3 gap-2 text-sm">

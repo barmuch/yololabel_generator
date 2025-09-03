@@ -18,6 +18,14 @@ export async function getDatabase(): Promise<Db> {
   return cachedDb;
 }
 
+export async function connectToDatabase(): Promise<{ db: Db, client: MongoClient }> {
+  const db = await getDatabase();
+  if (!cachedClient) {
+    throw new Error('Client not initialized');
+  }
+  return { db, client: cachedClient };
+}
+
 export async function closeDatabase(): Promise<void> {
   if (cachedClient) {
     await cachedClient.close();

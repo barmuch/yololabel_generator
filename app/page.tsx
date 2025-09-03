@@ -41,10 +41,39 @@ export default function HomePage() {
   const loadAllProjects = async () => {
     try {
       setIsLoading(true);
-      const projects = await getAllProjects();
+      console.log('Loading projects from MongoDB...');
+      
+      // Load from server (MongoDB) only
+      let serverProjects: Project[] = [];
+      try {
+        console.log('Fetching projects from server...');
+        const response = await fetch('/api/projects');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.projects) {
+            serverProjects = data.projects;
+            console.log('Projects loaded from server:', serverProjects);
+          }
+        } else {
+          console.warn('Failed to fetch projects from server:', response.status);
+        }
+      } catch (serverError) {
+        console.warn('Error fetching projects from server:', serverError);
+      }
+      
+      // Normalize project structure to ensure expected properties exist
+      const normalizedProjects = serverProjects.map(project => ({
+        ...project,
+        images: project.images || [],
+        bboxes: project.bboxes || [],
+        classes: project.classes || []
+      }));
+      
       // Sort by updatedAt desc (most recent first)
-      projects.sort((a, b) => b.updatedAt - a.updatedAt);
-      setAllProjects(projects);
+      normalizedProjects.sort((a, b) => b.updatedAt - a.updatedAt);
+      setAllProjects(normalizedProjects);
+      
+      console.log('Total projects loaded:', normalizedProjects.length);
     } catch (error) {
       console.error('Failed to load projects:', error);
     } finally {
@@ -54,6 +83,8 @@ export default function HomePage() {
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
+
+    console.log('Creating new project:', newProjectName.trim());
 
     // Create basic project structure
     const newProject: Project = {
@@ -67,17 +98,34 @@ export default function HomePage() {
     };
 
     try {
-      // Save to IndexedDB
-      await saveProject(newProject);
+      // Save to server (MongoDB) only
+      console.log('Saving project to server...');
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProject),
+      });
       
-      // Load project and navigate to labeler
-      loadProject(newProject);
-      setNewProjectName('');
-      setIsNewProjectOpen(false);
-      router.push('/labeler');
+      if (response.ok) {
+        console.log('Project saved to server successfully');
+        
+        // Load project and navigate to labeler
+        loadProject(newProject);
+        setNewProjectName('');
+        setIsNewProjectOpen(false);
+        
+        // Refresh the project list
+        await loadAllProjects();
+        
+        router.push('/labeler');
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to save project to server:', errorText);
+        alert('Failed to create project: ' + errorText);
+      }
     } catch (error) {
       console.error('Failed to create project:', error);
-      alert('Failed to create project');
+      alert('Failed to create project: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -91,15 +139,74 @@ export default function HomePage() {
     }
   };
 
+  const forceLoadFromServer = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Force loading projects from server only...');
+      
+      const response = await fetch('/api/projects');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.projects) {
+          console.log('Projects force loaded from server:', data.projects);
+          
+          // Save all server projects to IndexedDB
+          for (const project of data.projects) {
+            try {
+              await saveProject(project);
+            } catch (saveError) {
+              console.warn('Failed to save server project to IndexedDB:', saveError);
+            }
+          }
+          
+          // Sort by updatedAt desc (most recent first)
+          data.projects.sort((a: Project, b: Project) => b.updatedAt - a.updatedAt);
+          setAllProjects(data.projects);
+          
+          console.log('Total projects loaded from server:', data.projects.length);
+        } else {
+          console.error('Invalid response from server:', data);
+          alert('Failed to load projects from server');
+        }
+      } else {
+        console.error('Server responded with error:', response.status);
+        alert('Failed to connect to server');
+      }
+    } catch (error) {
+      console.error('Failed to force load from server:', error);
+      alert('Failed to load projects from server: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteProject = async (projectId: string, projectName: string) => {
-    if (!confirm(`Are you sure you want to delete project "${projectName}"?`)) return;
+    if (!confirm(`Are you sure you want to delete project "${projectName}"? This will also delete all associated images and annotations.`)) return;
 
     try {
-      await deleteProject(projectId);
-      await loadAllProjects();
+      console.log('Deleting project:', projectId);
+      
+      // Delete from server (MongoDB) only
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Project deleted from server:', result);
+        
+        // Refresh project list
+        await loadAllProjects();
+        
+        alert('Project deleted successfully!');
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to delete project from server:', errorText);
+        alert('Failed to delete project: ' + errorText);
+      }
     } catch (error) {
       console.error('Failed to delete project:', error);
-      alert('Failed to delete project');
+      alert('Failed to delete project: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -163,10 +270,16 @@ export default function HomePage() {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold">Projects</h2>
-            <Button variant="ghost" size="sm" onClick={loadAllProjects}>
-              <Clock className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={forceLoadFromServer}>
+                <Calendar className="w-4 h-4 mr-2" />
+                Load from Server
+              </Button>
+              <Button variant="ghost" size="sm" onClick={loadAllProjects}>
+                <Clock className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -202,15 +315,15 @@ export default function HomePage() {
                         <div className="flex items-center space-x-6">
                           <span className="flex items-center">
                             <FileImage className="w-4 h-4 mr-1" />
-                            {project.images.length} images
+                            {project.imageCount || project.images?.length || 0} images
                           </span>
                           <span className="flex items-center">
                             <Edit className="w-4 h-4 mr-1" />
-                            {project.bboxes.length} annotations
+                            {project.annotationCount || project.bboxes?.length || 0} annotations
                           </span>
                           <span className="flex items-center">
                             <FolderOpen className="w-4 h-4 mr-1" />
-                            {project.classes.length} classes
+                            {project.classes?.length || 0} classes
                           </span>
                         </div>
                         <div className="flex items-center mt-1">

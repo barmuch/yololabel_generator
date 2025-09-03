@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{\"app\\\\labeler\\\\page.tsx -> @/components/CanvasStage\":{\"id\":\"app\\\\labeler\\\\page.tsx -> @/components/CanvasStage\",\"files\":[\"static/chunks/_app-pages-browser_components_CanvasStage_tsx.js\"]},\"app\\\\labeler\\\\page.tsx -> @/lib/idb\":{\"id\":\"app\\\\labeler\\\\page.tsx -> @/lib/idb\",\"files\":[]}}"
+self.__REACT_LOADABLE_MANIFEST="{}"

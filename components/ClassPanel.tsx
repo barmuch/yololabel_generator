@@ -159,7 +159,7 @@ export function ClassPanel() {
 
       {/* Class list */}
       <div className="flex-1 overflow-y-auto">
-        {classes.length === 0 ? (
+        {!classes || classes.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <Palette className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>No classes defined</p>
@@ -236,7 +236,7 @@ export function ClassPanel() {
                       handleDeleteClass(cls.id);
                     }}
                     className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                    disabled={classes.length === 1}
+                    disabled={!classes || classes.length === 1}
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>
@@ -250,7 +250,7 @@ export function ClassPanel() {
       {/* Class count and info */}
       <div className="p-4 border-t bg-muted/50">
         <div className="text-sm text-muted-foreground">
-          <div>Total classes: {classes.length}</div>
+          <div>Total classes: {classes?.length || 0}</div>
           <div className="text-xs mt-1">
             Press 1-9 to select classes quickly
           </div>
