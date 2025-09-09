@@ -12,7 +12,7 @@ import {
   ZoomOut, 
   RotateCcw,
   Download,
-  Grid3X3,
+  Grid,
   Eye,
   EyeOff,
   Lock,

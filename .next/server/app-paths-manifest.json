@@ -1,4 +1,16 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/annotations/route": "app/api/annotations/route.js",
+  "/api/images-new/route": "app/api/images-new/route.js",
+  "/api/projects/[id]/route": "app/api/projects/[id]/route.js",
+  "/api/project/route": "app/api/project/route.js",
   "/api/projects/route": "app/api/projects/route.js",
-  "/page": "app/page.js"
+  "/page": "app/page.js",
+  "/api/test-cloudinary/route": "app/api/test-cloudinary/route.js",
+  "/labeler/page": "app/labeler/page.js",
+  "/api/debug/images/route": "app/api/debug/images/route.js",
+  "/api/upload-complete/route": "app/api/upload-complete/route.js",
+  "/api/images/route": "app/api/images/route.js",
+  "/api/upload/test/route": "app/api/upload/test/route.js",
+  "/api/upload/route": "app/api/upload/route.js"
 }

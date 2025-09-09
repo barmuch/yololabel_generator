@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useLabelStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -21,7 +21,7 @@ export function ImageStrip() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const images = currentProject?.images || [];
+  const images = useMemo(() => currentProject?.images || [], [currentProject?.images]);
   const currentIndex = currentImageId && images.length > 0
     ? images.findIndex(img => img.id === currentImageId)
     : -1;
@@ -48,17 +48,17 @@ export function ImageStrip() {
     }
   }, [currentImageId]);
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
       setCurrentImage(images[currentIndex - 1].id);
     }
-  };
+  }, [currentIndex, images, setCurrentImage]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentIndex < images.length - 1) {
       setCurrentImage(images[currentIndex + 1].id);
     }
-  };
+  }, [currentIndex, images, setCurrentImage]);
 
   useEffect(() => {
     const handleKeyNavigation = (e: KeyboardEvent) => {
@@ -183,9 +183,11 @@ export function ImageStrip() {
                     }
                     
                     return (
-                      <img
+                      <Image
                         src={src}
                         alt={image.name}
+                        width={128}
+                        height={128}
                         className="w-full h-full object-cover"
                         loading="lazy"
                         crossOrigin="anonymous"

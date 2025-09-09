@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     
     const { db } = await connectToDatabase();
     
-    let filter: any = {};
+    const filter: any = {};
     if (projectId) filter.projectId = projectId;
     if (imageId) filter.imageId = imageId;
     

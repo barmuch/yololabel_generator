@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST='{"app\\\\labeler\\\\page.tsx -> @/components/CanvasStage":{"id":7915,"files":["static/chunks/466.85a453cae5ad97b6.js","static/chunks/915.739e5258d7d415b0.js"]},"app\\\\labeler\\\\page.tsx -> @/lib/store":{"id":6936,"files":[]}}';
