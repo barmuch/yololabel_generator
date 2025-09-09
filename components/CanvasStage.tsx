@@ -100,7 +100,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         imageRef.current.onerror = null;
       }
     };
-  }, [image.cloudinary?.secure_url, image.url, image.blobUrl, containerWidth, containerHeight, setViewport]);
+  }, [image.cloudinary?.secure_url, image.url, image.blobUrl, image.name, containerWidth, containerHeight, setViewport]);
 
   // Handle transformer selection
   useEffect(() => {

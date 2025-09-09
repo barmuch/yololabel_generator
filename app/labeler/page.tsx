@@ -96,7 +96,7 @@ export default function LabelerPage() {
       
       loadRecentProject();
     }
-  }, [currentProject, currentImageId, currentImage, isLoading]);
+  }, [currentProject, currentImageId, currentImage, isLoading, loadProject]);
 
   // Update project name state when project changes and explicitly fetch images
   useEffect(() => {
