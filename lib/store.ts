@@ -29,6 +29,7 @@ interface LabelStore {
   
   // Actions - Image management
   addImages: (files: File[]) => Promise<void>;
+  addImagesFromData: (images: ImageItem[]) => void;
   removeImage: (imageId: string) => Promise<void>;
   setCurrentImage: (imageId: string | null) => void;
   
@@ -305,6 +306,44 @@ export const useLabelStore = create<LabelStore>()(
       } finally {
         set((state) => { state.isLoading = false; });
       }
+    },
+
+    // Add images from pre-processed data (e.g., converted PDF pages)
+    addImagesFromData: (images: ImageItem[]) => {
+      console.log('addImagesFromData called with images:', images.map(img => img.name));
+      const currentProject = get().currentProject;
+      
+      if (!currentProject) {
+        console.error('No project loaded');
+        alert('Please load a project first');
+        return;
+      }
+
+      if (images.length === 0) {
+        console.warn('No images provided');
+        return;
+      }
+
+      set((state) => {
+        if (state.currentProject) {
+          // Add new images to the project
+          state.currentProject.images.push(...images);
+          state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
+          
+          console.log(`Added ${images.length} images to project. Total: ${state.currentProject.images.length}`);
+          
+          // Set first added image as current if no image is currently selected
+          if (!state.currentImageId && images.length > 0) {
+            state.currentImageId = images[0].id;
+            console.log('Set current image to:', images[0].name);
+          }
+        }
+      });
+
+      // Auto-save to IndexedDB
+      const saveToIndexedDB = get().saveToIndexedDB;
+      saveToIndexedDB();
     },
 
     removeImage: async (imageId: string) => {

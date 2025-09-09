@@ -16,6 +16,10 @@ export type ImageItem = {
   };
   url: string; // Main URL to use (either blobUrl or cloudinary.secure_url)
   status?: "new" | "labeled";
+  originalFormat?: string; // Track if converted from PDF
+  isPdfPage?: boolean; // Flag to indicate this is a PDF page
+  pdfPageNumber?: number; // Page number if from PDF
+  originalPdfName?: string; // Original PDF filename
 };
 
 export type BBox = {

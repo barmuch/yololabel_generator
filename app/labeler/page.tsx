@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Save, Download, Upload, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
+import { convertPdfToImages, isPdfFile } from '@/lib/pdf-utils';
 
 // Dynamically import CanvasStage to avoid SSR issues with Konva
 const CanvasStage = dynamic(
@@ -34,6 +35,7 @@ export default function LabelerPage() {
     updateProjectName,
     saveToIndexedDB,
     addImages,
+    addImagesFromData,
     isSaving,
     isLoading,
     loadProject,
@@ -208,21 +210,65 @@ export default function LabelerPage() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    console.log('Selected files:', files.map(f => ({ name: f.name, type: f.type })));
     
-    if (imageFiles.length === 0) {
-      alert('No valid image files selected');
+    if (files.length === 0) {
       return;
     }
 
-    console.log('Uploading images:', imageFiles.map(f => f.name));
+    const imageFiles: File[] = [];
+    const pdfFiles: File[] = [];
+    
+    // Separate image files and PDF files
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        imageFiles.push(file);
+      } else if (isPdfFile(file)) {
+        pdfFiles.push(file);
+      }
+    });
+    
+    if (imageFiles.length === 0 && pdfFiles.length === 0) {
+      alert('No valid image or PDF files selected');
+      return;
+    }
+
+    console.log('Processing:', { imageFiles: imageFiles.length, pdfFiles: pdfFiles.length });
     
     try {
-      await addImages(imageFiles);
-      console.log('Images uploaded successfully');
+      // Upload regular image files
+      if (imageFiles.length > 0) {
+        console.log('Uploading images:', imageFiles.map(f => f.name));
+        await addImages(imageFiles);
+      }
+      
+      // Process PDF files
+      for (const pdfFile of pdfFiles) {
+        console.log('Converting PDF to images:', pdfFile.name);
+        try {
+          const pdfImages = await convertPdfToImages(pdfFile, {
+            scale: 2,
+            format: 'jpeg',
+            quality: 0.9
+          });
+          
+          console.log(`Converted ${pdfImages.length} pages from ${pdfFile.name}`);
+          
+          // Add the converted images to the project
+          if (pdfImages.length > 0) {
+            addImagesFromData(pdfImages);
+          }
+          
+        } catch (error) {
+          console.error(`Failed to convert PDF ${pdfFile.name}:`, error);
+          alert(`Failed to convert PDF ${pdfFile.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      console.log('All files processed successfully');
     } catch (error) {
-      console.error('Failed to upload images:', error);
-      alert('Failed to upload images');
+      console.error('Failed to process files:', error);
+      alert('Failed to process files');
     }
 
     // Reset input
@@ -234,21 +280,65 @@ export default function LabelerPage() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    console.log('Dropped files:', files.map(f => ({ name: f.name, type: f.type })));
     
-    if (imageFiles.length === 0) {
-      alert('No valid image files found');
+    if (files.length === 0) {
       return;
     }
 
-    console.log('Dropping images:', imageFiles.map(f => f.name));
+    const imageFiles: File[] = [];
+    const pdfFiles: File[] = [];
+    
+    // Separate image files and PDF files
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        imageFiles.push(file);
+      } else if (isPdfFile(file)) {
+        pdfFiles.push(file);
+      }
+    });
+    
+    if (imageFiles.length === 0 && pdfFiles.length === 0) {
+      alert('No valid image or PDF files found');
+      return;
+    }
+
+    console.log('Processing dropped files:', { imageFiles: imageFiles.length, pdfFiles: pdfFiles.length });
     
     try {
-      await addImages(imageFiles);
-      console.log('Images uploaded successfully');
+      // Upload regular image files
+      if (imageFiles.length > 0) {
+        console.log('Uploading dropped images:', imageFiles.map(f => f.name));
+        await addImages(imageFiles);
+      }
+      
+      // Process PDF files
+      for (const pdfFile of pdfFiles) {
+        console.log('Converting dropped PDF to images:', pdfFile.name);
+        try {
+          const pdfImages = await convertPdfToImages(pdfFile, {
+            scale: 2,
+            format: 'jpeg',
+            quality: 0.9
+          });
+          
+          console.log(`Converted ${pdfImages.length} pages from dropped ${pdfFile.name}`);
+          
+          // Add the converted images to the project
+          if (pdfImages.length > 0) {
+            addImagesFromData(pdfImages);
+          }
+          
+        } catch (error) {
+          console.error(`Failed to convert dropped PDF ${pdfFile.name}:`, error);
+          alert(`Failed to convert PDF ${pdfFile.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      console.log('All dropped files processed successfully');
     } catch (error) {
-      console.error('Failed to upload images:', error);
-      alert('Failed to upload images');
+      console.error('Failed to process dropped files:', error);
+      alert('Failed to process dropped files');
     }
   };
 
@@ -418,7 +508,7 @@ export default function LabelerPage() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*"
+        accept="image/*,.pdf"
         className="hidden"
         onChange={handleFileChange}
       />

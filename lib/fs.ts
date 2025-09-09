@@ -5,6 +5,7 @@ import { toYoloTxt, generateClassesTxt } from './yolo';
 import { generateDataYaml } from './dataYaml';
 import { splitDataset } from './split';
 import { removeFileExtension } from './utils';
+import { convertImageToYoloFormat, getImageFormatFromImageItem } from './pdf-utils';
 
 /**
  * File System Access API utilities for modern browsers
@@ -144,11 +145,33 @@ export async function exportSingleImageYolo(
   bboxes: BBox[],
   classes: ClassDef[]
 ): Promise<void> {
-  const imageBboxes = bboxes.filter(bbox => bbox.imageId === image.id);
-  const yoloContent = toYoloTxt(imageBboxes, image.width, image.height);
-  const filename = `${removeFileExtension(image.name)}.txt`;
-  
-  await saveFile(yoloContent, filename, 'text/plain');
+  try {
+    // Convert image to YOLO-compatible format
+    const convertedImageBlob = await convertImageToYoloFormat(image);
+    const targetFormat = getImageFormatFromImageItem(image);
+    
+    // Generate filename with appropriate extension
+    const baseName = removeFileExtension(image.name);
+    const imageFilename = `${baseName}.${targetFormat}`;
+    const labelFilename = `${baseName}.txt`;
+    
+    // Generate YOLO annotation content
+    const imageBboxes = bboxes.filter(bbox => bbox.imageId === image.id);
+    const yoloContent = toYoloTxt(imageBboxes, image.width, image.height);
+    
+    // Create ZIP file with both image and label
+    const zip = new JSZip();
+    zip.file(imageFilename, convertedImageBlob);
+    zip.file(labelFilename, yoloContent);
+    
+    // Generate and download ZIP
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    saveAs(zipBlob, `${baseName}_yolo.zip`);
+    
+  } catch (error) {
+    console.error('Error exporting single image:', error);
+    throw error;
+  }
 }
 
 /**
@@ -198,17 +221,24 @@ export async function exportDatasetZip(
   const addSplitFiles = async (splitImages: ImageItem[], splitName: string) => {
     for (const image of splitImages) {
       try {
-        // Add image file - use either Cloudinary URL or blob URL
-        const imageUrl = image.url; // This contains either cloudinary secure_url or blobUrl
-        const response = await fetch(imageUrl);
-        const imageBlob = await response.blob();
-        zip.file(`images/${splitName}/${image.name}`, imageBlob);
+        // Convert image to YOLO-compatible format
+        const convertedImageBlob = await convertImageToYoloFormat(image);
+        const targetFormat = getImageFormatFromImageItem(image);
+        
+        // Generate appropriate filename
+        const baseName = removeFileExtension(image.name);
+        const imageFilename = `${baseName}.${targetFormat}`;
+        const labelFilename = `${baseName}.txt`;
+        
+        // Add converted image file
+        zip.file(`images/${splitName}/${imageFilename}`, convertedImageBlob);
         
         // Add label file
         const imageBboxes = bboxes.filter(bbox => bbox.imageId === image.id);
         const yoloContent = toYoloTxt(imageBboxes, image.width, image.height);
-        const labelFilename = `${removeFileExtension(image.name)}.txt`;
         zip.file(`labels/${splitName}/${labelFilename}`, yoloContent);
+        
+        console.log(`Added ${imageFilename} (converted from ${image.originalFormat || 'image'}) to ${splitName} split`);
       } catch (error) {
         console.warn(`Failed to add image ${image.name}:`, error);
       }
