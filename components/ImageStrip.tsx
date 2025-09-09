@@ -196,18 +196,33 @@ export function ImageStrip() {
                         }}
                         onError={(e) => {
                           console.error(`[ImageStrip] ❌ Failed to load thumbnail for ${image.name} with src:`, src);
-                          // Try other available URLs as fallbacks
                           const el = e.currentTarget as HTMLImageElement;
+                          
+                          // If it's a Cloudinary URL, try different transformations
+                          if (src.includes('res.cloudinary.com')) {
+                            // Try with smaller quality and format auto
+                            const fallbackCloudinaryUrl = src.replace(
+                              '/image/upload/',
+                              '/image/upload/q_auto,f_auto,w_128,h_128,c_fill/'
+                            );
+                            
+                            if (fallbackCloudinaryUrl !== src) {
+                              console.log(`[ImageStrip] Trying Cloudinary fallback for ${image.name}:`, fallbackCloudinaryUrl);
+                              el.src = fallbackCloudinaryUrl;
+                              return;
+                            }
+                          }
+                          
+                          // Try other available URLs as fallbacks
                           const fallbacks = [
                             image.url,
-                            image.blobUrl,
-                            image.cloudinary?.secure_url
+                            image.blobUrl
                           ].filter(url => url && url !== el.src);
                           
                           const nextFallback = fallbacks[0];
-                          console.log(`[ImageStrip] Trying fallback for ${image.name}:`, nextFallback);
                           
                           if (nextFallback) {
+                            console.log(`[ImageStrip] Trying fallback for ${image.name}:`, nextFallback);
                             el.src = nextFallback;
                           } else {
                             // Show error placeholder
