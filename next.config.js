@@ -6,6 +6,13 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: false,
   },
+  webpack: (config, { isServer }) => {
+    // Handle Konva on server side
+    if (isServer) {
+      config.externals.push('canvas');
+    }
+    return config;
+  },
   async headers() {
     return [
       {
