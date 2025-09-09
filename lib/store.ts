@@ -20,6 +20,7 @@ interface LabelStore {
   // Loading/saving state
   isLoading: boolean;
   isSaving: boolean;
+  hasUnsavedChanges: boolean;
   
   // Actions - Project management
   createProject: (name: string) => void;
@@ -108,6 +109,7 @@ export const useLabelStore = create<LabelStore>()(
     exportOptions: defaultExportOptions,
     isLoading: false,
     isSaving: false,
+    hasUnsavedChanges: false,
 
     // Project management
     createProject: (name: string) => {
@@ -190,6 +192,7 @@ export const useLabelStore = create<LabelStore>()(
         if (state.currentProject) {
           state.currentProject.name = name;
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
         }
       });
     },
@@ -282,6 +285,7 @@ export const useLabelStore = create<LabelStore>()(
             if (state.currentProject) {
               state.currentProject.images.push(...newImages);
               state.currentProject.updatedAt = Date.now();
+              state.hasUnsavedChanges = true;
               
               // Set first image as current if none selected
               if (!state.currentImageId && newImages.length > 0) {
@@ -339,26 +343,48 @@ export const useLabelStore = create<LabelStore>()(
           }
 
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
         }
       });
 
-      // Delete from Cloudinary if it was uploaded there
+      // Delete from MongoDB and Cloudinary
       if (imageToRemove.cloudinary?.public_id) {
         try {
-          console.log(`🗑️ Deleting ${imageToRemove.name} from Cloudinary...`);
+          console.log(`🗑️ Deleting ${imageToRemove.name} from MongoDB and Cloudinary...`);
           
-          const response = await fetch(`/api/upload?public_id=${encodeURIComponent(imageToRemove.cloudinary.public_id)}`, {
+          // Delete from MongoDB (which will also delete from Cloudinary if requested)
+          const response = await fetch(`/api/images?imageId=${encodeURIComponent(imageId)}&projectId=${encodeURIComponent(project.id)}&deleteFromCloudinary=true`, {
             method: 'DELETE',
           });
 
           const result = await response.json();
           if (result.success) {
-            console.log(`✅ Successfully deleted ${imageToRemove.name} from Cloudinary`);
+            console.log(`✅ Successfully deleted ${imageToRemove.name} from database and Cloudinary`);
+            console.log(`🗑️ Also deleted ${result.deletedAnnotations} associated annotations`);
           } else {
-            console.warn(`⚠️ Failed to delete ${imageToRemove.name} from Cloudinary:`, result);
+            console.warn(`⚠️ Failed to delete ${imageToRemove.name} from database:`, result);
           }
         } catch (error) {
-          console.error(`❌ Error deleting ${imageToRemove.name} from Cloudinary:`, error);
+          console.error(`❌ Error deleting ${imageToRemove.name}:`, error);
+        }
+      } else {
+        // If no Cloudinary data, just delete from MongoDB
+        try {
+          console.log(`🗑️ Deleting ${imageToRemove.name} from MongoDB only...`);
+          
+          const response = await fetch(`/api/images?imageId=${encodeURIComponent(imageId)}&projectId=${encodeURIComponent(project.id)}`, {
+            method: 'DELETE',
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            console.log(`✅ Successfully deleted ${imageToRemove.name} from database`);
+            console.log(`🗑️ Also deleted ${result.deletedAnnotations} associated annotations`);
+          } else {
+            console.warn(`⚠️ Failed to delete ${imageToRemove.name} from database:`, result);
+          }
+        } catch (error) {
+          console.error(`❌ Error deleting ${imageToRemove.name}:`, error);
         }
       }
 
@@ -385,6 +411,7 @@ export const useLabelStore = create<LabelStore>()(
           };
           state.currentProject.classes.push(newClass);
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
         }
       });
     },
@@ -410,6 +437,7 @@ export const useLabelStore = create<LabelStore>()(
           }
 
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
         }
       });
     },
@@ -421,6 +449,7 @@ export const useLabelStore = create<LabelStore>()(
           if (classIndex >= 0) {
             Object.assign(state.currentProject.classes[classIndex], updates);
             state.currentProject.updatedAt = Date.now();
+            state.hasUnsavedChanges = true;
           }
         }
       });
@@ -455,6 +484,7 @@ export const useLabelStore = create<LabelStore>()(
           }
 
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
         }
       });
     },
@@ -467,6 +497,7 @@ export const useLabelStore = create<LabelStore>()(
         if (state.currentProject) {
           state.currentProject.bboxes.push({ ...bbox, id });
           state.currentProject.updatedAt = Date.now();
+          state.hasUnsavedChanges = true;
           
           // Update image status
           const image = state.currentProject.images.find(img => img.id === bbox.imageId);
@@ -492,6 +523,7 @@ export const useLabelStore = create<LabelStore>()(
             affectedImageId = state.currentProject.bboxes[bboxIndex].imageId;
             Object.assign(state.currentProject.bboxes[bboxIndex], updates);
             state.currentProject.updatedAt = Date.now();
+            state.hasUnsavedChanges = true;
           }
         }
       });
@@ -503,16 +535,23 @@ export const useLabelStore = create<LabelStore>()(
     },
 
     removeBBox: (bboxId: string) => {
+      console.log('🗑️ removeBBox called with bboxId:', bboxId);
+      
       let affectedImageId: string | undefined;
       let affectedProjectId: string | undefined;
       
       set((state) => {
         if (state.currentProject) {
           const bboxIndex = state.currentProject.bboxes.findIndex(bbox => bbox.id === bboxId);
+          console.log('📍 Found bbox at index:', bboxIndex);
+          
           if (bboxIndex >= 0) {
             const bbox = state.currentProject.bboxes[bboxIndex];
             affectedImageId = bbox.imageId;
             affectedProjectId = state.currentProject.id;
+            
+            console.log('🎯 Removing bbox:', { id: bbox.id, imageId: affectedImageId, projectId: affectedProjectId });
+            
             state.currentProject.bboxes.splice(bboxIndex, 1);
             
             // Update image status if no more bboxes
@@ -530,13 +569,17 @@ export const useLabelStore = create<LabelStore>()(
             }
 
             state.currentProject.updatedAt = Date.now();
+            state.hasUnsavedChanges = true;
           }
         }
       });
 
       // Auto-delete annotation from server
       if (affectedImageId && affectedProjectId) {
+        console.log('🌐 Calling deleteAnnotationFromServer:', { bboxId, affectedImageId, affectedProjectId });
         get().deleteAnnotationFromServer(bboxId, affectedImageId, affectedProjectId);
+      } else {
+        console.warn('⚠️ Cannot delete from server: missing imageId or projectId');
       }
     },
 
@@ -621,7 +664,12 @@ export const useLabelStore = create<LabelStore>()(
 
     saveToIndexedDB: async () => {
       const project = get().currentProject;
-      if (!project) return;
+      const hasChanges = get().hasUnsavedChanges;
+      
+      if (!project || !hasChanges) {
+        console.log('⏭️ Skipping save - no changes detected');
+        return;
+      }
 
       set((state) => { state.isSaving = true; });
 
@@ -641,6 +689,8 @@ export const useLabelStore = create<LabelStore>()(
             console.warn('Failed to save project to server:', await res.text());
           } else {
             console.log('Project saved to server (MongoDB)');
+            // Mark as saved only if both IndexedDB and MongoDB save succeeded
+            set((state) => { state.hasUnsavedChanges = false; });
           }
         } catch (serverErr) {
           console.warn('Error saving project to server:', serverErr);
@@ -747,7 +797,7 @@ export const useLabelStore = create<LabelStore>()(
             }
 
             const imageItem: any = {
-              id: si.id || si._id || si.publicId, // Use server ID or fallback to publicId
+              id: si.id || si._id || si.publicId, // Use the stable ID from MongoDB
               name: si.originalName || si.publicId,
               width: si.width || 0,
               height: si.height || 0,
@@ -1009,14 +1059,23 @@ export const useLabelStore = create<LabelStore>()(
 
     deleteAnnotationFromServer: async (bboxId: string, imageId: string, projectId: string) => {
       try {
-        const response = await fetch(`/api/annotations?annotationId=${encodeURIComponent(bboxId)}&imageId=${encodeURIComponent(imageId)}&projectId=${encodeURIComponent(projectId)}`, {
+        console.log('🌐 deleteAnnotationFromServer called:', { bboxId, imageId, projectId });
+        
+        const url = `/api/annotations?id=${encodeURIComponent(bboxId)}&imageId=${encodeURIComponent(imageId)}&projectId=${encodeURIComponent(projectId)}`;
+        console.log('🔗 DELETE URL:', url);
+        
+        const response = await fetch(url, {
           method: 'DELETE',
         });
 
+        console.log('📡 DELETE response status:', response.status);
+        
         if (response.ok) {
-          console.log(`✅ Annotation ${bboxId} deleted successfully`);
+          const result = await response.json();
+          console.log(`✅ Annotation ${bboxId} deleted successfully:`, result);
         } else {
-          console.warn(`Failed to delete annotation ${bboxId}:`, await response.text());
+          const errorText = await response.text();
+          console.warn(`❌ Failed to delete annotation ${bboxId}:`, errorText);
         }
       } catch (error) {
         console.error('Error deleting annotation from server:', error);
@@ -1043,6 +1102,10 @@ export const useLabelStore = create<LabelStore>()(
         const serverAnnotations = data.annotations;
         console.log(`📊 Found ${serverAnnotations.length} annotations on server for project ${projectId}`);
         
+        // Debug: Log current images and their IDs
+        const currentImages = get().currentProject?.images || [];
+        console.log('🖼️ Current images in project:', currentImages.map(img => ({ id: img.id, name: img.name })));
+        
         set((state) => {
           if (!state.currentProject || state.currentProject.id !== projectId) {
             console.warn('Current project mismatch when loading annotations');
@@ -1052,14 +1115,27 @@ export const useLabelStore = create<LabelStore>()(
           // Clear existing bboxes for this project to avoid duplicates
           state.currentProject.bboxes = [];
           
+          console.log('🔄 Processing annotations...');
+          
           // Convert server annotations to bboxes
           for (const annotation of serverAnnotations) {
+            console.log('📋 Processing annotation:', {
+              id: annotation.id,
+              imageId: annotation.imageId,
+              bbox: annotation.bbox
+            });
+            
             // Find the image for this annotation
             const image = state.currentProject.images.find(img => img.id === annotation.imageId);
             if (!image) {
-              console.warn('Image not found for annotation:', annotation.imageId);
+              console.warn('❌ Image not found for annotation:', {
+                annotationImageId: annotation.imageId,
+                availableImageIds: state.currentProject.images.map(img => img.id)
+              });
               continue;
             }
+            
+            console.log('✅ Found matching image:', { imageId: image.id, imageName: image.name });
             
             // Convert annotation to bbox format
             const bbox: BBox = {
@@ -1073,12 +1149,18 @@ export const useLabelStore = create<LabelStore>()(
             };
             
             state.currentProject.bboxes.push(bbox);
+            console.log('📦 Added bbox to project:', bbox);
             
             // Update image status
             image.status = 'labeled';
           }
           
           console.log(`✅ Loaded ${state.currentProject.bboxes.length} annotations into project`);
+          
+          // Debug: Log all loaded bboxes
+          state.currentProject.bboxes.forEach(bbox => {
+            console.log(`📦 Loaded bbox: ${bbox.id} for image ${bbox.imageId} at (${bbox.x},${bbox.y},${bbox.w},${bbox.h})`);
+          });
         });
         
       } catch (error) {

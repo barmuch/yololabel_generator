@@ -161,6 +161,7 @@ export async function GET(request: NextRequest) {
       // Sanitize response data
       const sanitizedImages = docs.map((image: any) => ({
         _id: image._id,
+        id: image.id, // Include the stable image ID
         projectId: image.projectId,
         publicId: image.cloudinary?.public_id || image.publicId || image.public_id,
         url: image.cloudinary?.secure_url || image.url || image.secure_url,
@@ -319,6 +320,157 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to update image annotations',
+        details: env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE: Removes an image from MongoDB and optionally from Cloudinary
+ * Query params: imageId (required), projectId (required), deleteFromCloudinary (optional)
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    // Apply rate limiting
+    const ip = request.ip ?? '127.0.0.1';
+    const { success } = await limiter.check(10, ip);
+    
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const imageId = searchParams.get('imageId');
+    const projectId = searchParams.get('projectId');
+    const deleteFromCloudinary = searchParams.get('deleteFromCloudinary') === 'true';
+    
+    if (!imageId || !projectId) {
+      return NextResponse.json(
+        { error: 'imageId and projectId are required' },
+        { status: 400 }
+      );
+    }
+
+    console.log('🗑️ Deleting image from MongoDB:', { imageId, projectId, deleteFromCloudinary });
+
+    const db = await getDatabase();
+
+    // Find the image first to get Cloudinary info if needed
+    // Try to find by custom 'id' field first, then by MongoDB '_id'
+    let imageToDelete = await db.collection('images').findOne({ 
+      id: imageId, 
+      projectId: projectId 
+    });
+
+    // If not found by custom 'id', try by MongoDB '_id'
+    if (!imageToDelete) {
+      try {
+        const { ObjectId } = require('mongodb');
+        // Check if the imageId is a valid ObjectId format
+        if (ObjectId.isValid(imageId)) {
+          imageToDelete = await db.collection('images').findOne({ 
+            _id: new ObjectId(imageId), 
+            projectId: projectId 
+          });
+        }
+      } catch (error) {
+        console.log('🔍 Failed to parse as ObjectId:', imageId, error);
+      }
+    }
+
+    if (!imageToDelete) {
+      return NextResponse.json(
+        { error: 'Image not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the image from MongoDB using the same criteria that found it
+    let deleteResult;
+    if (imageToDelete.id) {
+      // If it has a custom 'id' field, use that
+      deleteResult = await db.collection('images').deleteOne({ 
+        id: imageId, 
+        projectId: projectId 
+      });
+    } else {
+      // Otherwise, use the MongoDB '_id'
+      deleteResult = await db.collection('images').deleteOne({ 
+        _id: imageToDelete._id, 
+        projectId: projectId 
+      });
+    }
+
+    if (deleteResult.deletedCount === 0) {
+      return NextResponse.json(
+        { error: 'Failed to delete image from database' },
+        { status: 500 }
+      );
+    }
+
+    // Delete all associated annotations (use the actual imageId used for annotations)
+    const actualImageId = imageToDelete.id || imageToDelete._id.toString();
+    const annotationsDeleteResult = await db.collection('annotations').deleteMany({ 
+      imageId: actualImageId,
+      projectId: projectId 
+    });
+
+    console.log(`✅ Deleted image from MongoDB. Also deleted ${annotationsDeleteResult.deletedCount} associated annotations`);
+
+    // Update project's image and annotation counts
+    await db.collection('projects').updateOne(
+      { id: projectId },
+      { 
+        $inc: { 
+          imageCount: -1,
+          annotationCount: -annotationsDeleteResult.deletedCount
+        },
+        $set: { updatedAt: Date.now() }
+      }
+    );
+
+    // Optionally delete from Cloudinary
+    let cloudinaryResult = null;
+    if (deleteFromCloudinary && imageToDelete.cloudinary?.public_id) {
+      try {
+        console.log('🗑️ Also deleting from Cloudinary:', imageToDelete.cloudinary.public_id);
+        
+        const baseUrl = request.nextUrl.origin;
+        const cloudinaryResponse = await fetch(`${baseUrl}/api/upload?public_id=${encodeURIComponent(imageToDelete.cloudinary.public_id)}`, {
+          method: 'DELETE',
+        });
+
+        cloudinaryResult = await cloudinaryResponse.json();
+        if (cloudinaryResult.success) {
+          console.log('✅ Successfully deleted from Cloudinary');
+        } else {
+          console.warn('⚠️ Failed to delete from Cloudinary:', cloudinaryResult);
+        }
+      } catch (error) {
+        console.error('❌ Error deleting from Cloudinary:', error);
+        cloudinaryResult = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      deletedFromDatabase: true,
+      deletedAnnotations: annotationsDeleteResult.deletedCount,
+      cloudinaryResult: cloudinaryResult,
+      timestamp: new Date().toISOString(),
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting image:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to delete image',
         details: env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined,
         timestamp: new Date().toISOString(),
       },
