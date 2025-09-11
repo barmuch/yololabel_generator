@@ -49,6 +49,15 @@ export interface ImageDocument {
   // Status
   status: 'new' | 'labeled' | 'reviewed';
   annotationCount: number; // Cache for quick access
+  
+  // PDF-specific fields (optional)
+  originalFormat?: string; // 'pdf' for PDF pages, undefined for regular images
+  isPdfPage?: boolean; // true if this is a PDF page
+  pdfPageNumber?: number; // page number within the PDF
+  originalPdfName?: string; // original PDF filename
+  pdfOrientation?: string; // orientation of this specific PDF page
+  originalPdfWidth?: number; // original PDF page width
+  originalPdfHeight?: number; // original PDF page height
 }
 
 export interface AnnotationDocument {

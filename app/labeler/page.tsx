@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Save, Download, Upload, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
-import { convertPdfToImages, isPdfFile } from '@/lib/pdf-utils';
 
 // Dynamically import CanvasStage to avoid SSR issues with Konva
 const CanvasStage = dynamic(
@@ -208,6 +207,183 @@ export default function LabelerPage() {
     fileInputRef.current?.click();
   };
 
+  const handlePdfUpload = async (pdfFiles: File[]) => {
+    if (!currentProject) {
+      console.error('No current project for PDF upload');
+      return;
+    }
+
+    for (const pdfFile of pdfFiles) {
+      try {
+        const formData = new FormData();
+        formData.append('file', pdfFile);
+        
+        const response = await fetch('/api/upload-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to upload PDF: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('PDF uploaded successfully:', result);
+        console.log('PDF orientation:', result.orientation);
+        console.log('PDF dimensions:', { width: result.width, height: result.height });
+        
+        // Convert PDF pages to ImageItems and add to project
+        const { generateAllPdfPageUrls } = await import('@/lib/cloudinary-pdf');
+        const pdfPages = generateAllPdfPageUrls(result.publicId, result.pageCount, {
+          preserveAspectRatio: true,
+          quality: 'auto:best',
+          maxWidth: 1200
+        });
+        
+        console.log('Generated PDF pages:', pdfPages.map(p => ({ 
+          pageNumber: p.pageNumber, 
+          url: p.url 
+        })));
+        
+        // Save PDF pages to MongoDB via complete upload flow
+        try {
+          console.log('💾 Saving PDF pages to MongoDB...');
+          const saveResponse = await fetch('/api/upload-pdf-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: currentProject.id,
+              pdfData: result
+            }),
+          });
+          
+          if (!saveResponse.ok) {
+            throw new Error(`Failed to save PDF to database: ${saveResponse.statusText}`);
+          }
+          
+          const saveResult = await saveResponse.json();
+          
+          if (!saveResult.success) {
+            throw new Error(saveResult.error || 'Failed to save PDF to database');
+          }
+          
+          console.log(`✅ Successfully saved ${saveResult.savedPages} PDF pages to MongoDB`);
+          
+          // Use the saved image documents from MongoDB
+          const imageItems = saveResult.imageDocuments.map((doc: any) => ({
+            id: doc.id,
+            name: doc.name,
+            width: doc.width,
+            height: doc.height,
+            url: doc.url,
+            cloudinary: doc.cloudinary,
+            status: doc.status,
+            originalFormat: doc.originalFormat,
+            isPdfPage: doc.isPdfPage,
+            pdfPageNumber: doc.pdfPageNumber,
+            originalPdfName: doc.originalPdfName
+          }));
+          
+          console.log(`📊 Created ${imageItems.length} image items from saved PDF pages`);
+          
+          // Add to current project using the store's addImagesFromData function
+          await addImagesFromData(imageItems);
+          
+          console.log('Created image items:', imageItems.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            url: item.url,
+            pageNumber: item.pdfPageNumber
+          })));
+          
+        } catch (saveError) {
+          console.error('❌ Failed to save PDF to database:', saveError);
+          
+          // Fallback: Create image items locally without database persistence
+          console.log('📝 Creating PDF pages locally as fallback...');
+          
+          // Create image items with per-page orientation (fallback mode)
+          const imageItems = pdfPages.map(page => {
+            // Get page-specific info or fallback to overall PDF info
+            const pageInfo = result.pageInfos?.find((p: any) => p.pageNumber === page.pageNumber) || {
+              width: result.width,
+              height: result.height,
+              orientation: result.orientation
+            };
+            
+            // Calculate canvas dimensions for this specific page
+            const aspectRatio = pageInfo.width / pageInfo.height;
+            let canvasWidth = 1200;
+            let canvasHeight = Math.round(canvasWidth / aspectRatio);
+            
+            // For landscape pages (width > height), prioritize width constraint
+            // For portrait pages (height > width), check height constraint  
+            if (pageInfo.orientation === 'landscape' || aspectRatio > 1) {
+              // Landscape: width is dominant
+              if (canvasHeight > 1600) {
+                canvasHeight = 1600;
+                canvasWidth = Math.round(canvasHeight * aspectRatio);
+              }
+            } else {
+              // Portrait: height is dominant
+              if (canvasHeight > 1600) {
+                canvasHeight = 1600;
+                canvasWidth = Math.round(canvasHeight * aspectRatio);
+              }
+            }
+            
+            console.log(`Page ${page.pageNumber} canvas dimensions:`, { 
+              canvasWidth, 
+              canvasHeight, 
+              aspectRatio,
+              orientation: pageInfo.orientation,
+              originalWidth: pageInfo.width,
+              originalHeight: pageInfo.height
+            });
+            
+            return {
+              id: `pdf_${result.publicId}_page_${page.pageNumber}`,
+              name: `${result.filename} - Page ${page.pageNumber}`,
+              width: canvasWidth,
+              height: canvasHeight,
+              url: page.url,
+              cloudinary: {
+                public_id: result.publicId,
+                secure_url: page.url,
+                width: canvasWidth,
+                height: canvasHeight,
+                format: 'png',
+                bytes: 0,
+                originalWidth: pageInfo.width,
+                originalHeight: pageInfo.height,
+                orientation: pageInfo.orientation
+              },
+              status: 'new' as const,
+              originalFormat: 'pdf',
+              isPdfPage: true,
+              pdfPageNumber: page.pageNumber,
+              originalPdfName: result.filename
+            };
+          });
+          
+          // Add to current project using the store's addImagesFromData function (fallback mode)
+          await addImagesFromData(imageItems);
+          
+          console.log('Created image items (fallback):', imageItems.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            url: item.url,
+            pageNumber: item.pdfPageNumber
+          })));
+        }
+        
+      } catch (error) {
+        console.error('Error uploading PDF:', error);
+        alert(`Failed to upload PDF: ${pdfFile.name}`);
+      }
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     console.log('Selected files:', files.map(f => ({ name: f.name, type: f.type })));
@@ -216,53 +392,25 @@ export default function LabelerPage() {
       return;
     }
 
-    const imageFiles: File[] = [];
-    const pdfFiles: File[] = [];
-    
-    // Separate image files and PDF files
-    files.forEach(file => {
-      if (file.type.startsWith('image/')) {
-        imageFiles.push(file);
-      } else if (isPdfFile(file)) {
-        pdfFiles.push(file);
-      }
-    });
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    const pdfFiles = files.filter(file => file.type === 'application/pdf');
     
     if (imageFiles.length === 0 && pdfFiles.length === 0) {
       alert('No valid image or PDF files selected');
       return;
     }
 
-    console.log('Processing:', { imageFiles: imageFiles.length, pdfFiles: pdfFiles.length });
-    
     try {
-      // Upload regular image files
+      // Handle regular images
       if (imageFiles.length > 0) {
         console.log('Uploading images:', imageFiles.map(f => f.name));
         await addImages(imageFiles);
       }
       
-      // Process PDF files
-      for (const pdfFile of pdfFiles) {
-        console.log('Converting PDF to images:', pdfFile.name);
-        try {
-          const pdfImages = await convertPdfToImages(pdfFile, {
-            scale: 2,
-            format: 'jpeg',
-            quality: 0.9
-          });
-          
-          console.log(`Converted ${pdfImages.length} pages from ${pdfFile.name}`);
-          
-          // Add the converted images to the project
-          if (pdfImages.length > 0) {
-            addImagesFromData(pdfImages);
-          }
-          
-        } catch (error) {
-          console.error(`Failed to convert PDF ${pdfFile.name}:`, error);
-          alert(`Failed to convert PDF ${pdfFile.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
+      // Handle PDF files
+      if (pdfFiles.length > 0) {
+        console.log('Processing PDFs:', pdfFiles.map(f => f.name));
+        await handlePdfUpload(pdfFiles);
       }
       
       console.log('All files processed successfully');
@@ -286,55 +434,29 @@ export default function LabelerPage() {
       return;
     }
 
-    const imageFiles: File[] = [];
-    const pdfFiles: File[] = [];
-    
-    // Separate image files and PDF files
-    files.forEach(file => {
-      if (file.type.startsWith('image/')) {
-        imageFiles.push(file);
-      } else if (isPdfFile(file)) {
-        pdfFiles.push(file);
-      }
-    });
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    const pdfFiles = files.filter(file => file.type === 'application/pdf');
     
     if (imageFiles.length === 0 && pdfFiles.length === 0) {
       alert('No valid image or PDF files found');
       return;
     }
 
-    console.log('Processing dropped files:', { imageFiles: imageFiles.length, pdfFiles: pdfFiles.length });
-    
     try {
-      // Upload regular image files
+      // Handle regular images
       if (imageFiles.length > 0) {
         console.log('Uploading dropped images:', imageFiles.map(f => f.name));
         await addImages(imageFiles);
       }
       
-      // Process PDF files
-      for (const pdfFile of pdfFiles) {
-        console.log('Converting dropped PDF to images:', pdfFile.name);
-        try {
-          const pdfImages = await convertPdfToImages(pdfFile, {
-            scale: 2,
-            format: 'jpeg',
-            quality: 0.9
-          });
-          
-          console.log(`Converted ${pdfImages.length} pages from dropped ${pdfFile.name}`);
-          
-          // Add the converted images to the project
-          if (pdfImages.length > 0) {
-            addImagesFromData(pdfImages);
-          }
-          
-        } catch (error) {
-          console.error(`Failed to convert dropped PDF ${pdfFile.name}:`, error);
-          alert(`Failed to convert PDF ${pdfFile.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
+      // Handle PDF files
+      if (pdfFiles.length > 0) {
+        console.log('Processing dropped PDFs:', pdfFiles.map(f => f.name));
+        await handlePdfUpload(pdfFiles);
       }
       
+      console.log('All dropped files processed successfully');
+      await addImages(imageFiles);
       console.log('All dropped files processed successfully');
     } catch (error) {
       console.error('Failed to process dropped files:', error);
