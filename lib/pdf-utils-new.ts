@@ -24,12 +24,12 @@ const initReactPdf = async () => {
       Page = reactPdf.Page;
       pdfjs = reactPdf.pdfjs;
       
-      // Set worker with multiple fallback strategies
+      // Set worker with local package first, then fallback strategies
       const workerStrategies = [
+        new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString(),
         `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`,
         '//unpkg.com/pdfjs-dist@latest/build/pdf.worker.min.js',
-        '//cdn.jsdelivr.net/npm/pdfjs-dist@latest/build/pdf.worker.min.js',
-        '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        '//cdn.jsdelivr.net/npm/pdfjs-dist@latest/build/pdf.worker.min.js'
       ];
       
       for (const workerSrc of workerStrategies) {
