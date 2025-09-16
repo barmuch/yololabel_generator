@@ -23,6 +23,7 @@ export type ImageItem = {
   isPdfPage?: boolean; // Flag to indicate this is a PDF page
   pdfPageNumber?: number; // Page number if from PDF
   originalPdfName?: string; // Original PDF filename
+  pdfArrayBuffer?: ArrayBuffer; // Store PDF data for client-side rendering
 };
 
 export type BBox = {
