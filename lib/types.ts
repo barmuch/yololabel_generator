@@ -13,6 +13,9 @@ export type ImageItem = {
     height: number;
     format: string;
     bytes: number;
+    originalWidth?: number; // Original dimensions before scaling
+    originalHeight?: number;
+    orientation?: string; // portrait, landscape, square
   };
   url: string; // Main URL to use (either blobUrl or cloudinary.secure_url)
   status?: "new" | "labeled";

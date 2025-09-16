@@ -5,7 +5,41 @@ import { toYoloTxt, generateClassesTxt } from './yolo';
 import { generateDataYaml } from './dataYaml';
 import { splitDataset } from './split';
 import { removeFileExtension } from './utils';
-import { convertImageToYoloFormat, getImageFormatFromImageItem } from './pdf-utils';
+
+/**
+ * Convert image to YOLO format (simple implementation)
+ * For PDFs, just fetch the image directly
+ */
+async function convertImageToYoloFormat(image: ImageItem): Promise<Blob> {
+  try {
+    const response = await fetch(image.url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    return await response.blob();
+  } catch (error) {
+    console.error('Error converting image:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get image format from ImageItem
+ */
+function getImageFormatFromImageItem(image: ImageItem): string {
+  // Check cloudinary format first
+  if (image.cloudinary?.format) {
+    return image.cloudinary.format;
+  }
+  
+  // Check original format
+  if (image.originalFormat) {
+    return image.originalFormat === 'pdf' ? 'png' : image.originalFormat;
+  }
+  
+  // Fallback to jpg
+  return 'jpg';
+}
 
 /**
  * File System Access API utilities for modern browsers
