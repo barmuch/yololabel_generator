@@ -18,23 +18,31 @@ import {
   Clock,
   Trash2,
   Edit,
-  Calendar
+  Calendar,
+  Palette
 } from 'lucide-react';
 import { getAllProjects, deleteProject, saveProject } from '@/lib/idb';
 import { Project, ClassDef } from '@/lib/types';
 import { useRouter } from 'next/navigation';
-import ClassSetSelector from '@/components/ClassSetSelector';
+import Link from 'next/link';
+import SimpleClassSelector from '@/components/SimpleClassSelector';
 
 export default function HomePage() {
   const { loadProject } = useLabelStore();
 
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [selectedClassSetId, setSelectedClassSetId] = useState<string | null>(null);
-  const [selectedClasses, setSelectedClasses] = useState<ClassDef[]>([]);
+  const [selectedOption, setSelectedOption] = useState<'none' | 'template' | 'custom'>('none');
+  const [selectedClassData, setSelectedClassData] = useState<{ classSetId?: string; classes?: ClassDef[] }>({});
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+
+  // Handle class selection from SimpleClassSelector
+  const handleClassSelection = (option: 'none' | 'template' | 'custom', data?: { classSetId?: string; classes?: ClassDef[] }) => {
+    setSelectedOption(option);
+    setSelectedClassData(data || {});
+  };
 
   // Load all projects on mount
   useEffect(() => {
@@ -100,12 +108,13 @@ export default function HomePage() {
       updatedAt: Date.now(),
     };
 
-    // Add class configuration
-    if (selectedClassSetId) {
-      newProject.classSetId = selectedClassSetId;
-    } else {
-      newProject.classes = selectedClasses;
+    // Add class configuration based on selection
+    if (selectedOption === 'template' && selectedClassData.classSetId) {
+      newProject.classSetId = selectedClassData.classSetId;
+    } else if (selectedOption === 'custom' && selectedClassData.classes) {
+      newProject.classes = selectedClassData.classes;
     }
+    // For 'none' option, no classes are added
 
     try {
       // Save to server (MongoDB) only
@@ -122,8 +131,8 @@ export default function HomePage() {
         // Load project and navigate to labeler
         loadProject(newProject);
         setNewProjectName('');
-        setSelectedClassSetId(null);
-        setSelectedClasses([]);
+        setSelectedOption('none');
+        setSelectedClassData({});
         setIsNewProjectOpen(false);
         
         // Refresh the project list
@@ -139,11 +148,6 @@ export default function HomePage() {
       console.error('Failed to create project:', error);
       alert('Failed to create project: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-  };
-
-  const handleClassSetSelect = (classSetId: string | null, classes: ClassDef[]) => {
-    setSelectedClassSetId(classSetId);
-    setSelectedClasses(classes);
   };
 
   const handleLoadProject = async (project: Project) => {
@@ -248,7 +252,16 @@ export default function HomePage() {
               <p className="text-muted-foreground">Professional YOLO dataset annotation tool</p>
             </div>
 
-            <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+            <div className="flex items-center space-x-4">
+              <Link
+                href="/templates"
+                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm"
+              >
+                <Palette className="w-4 h-4" />
+                <span>Manage Templates</span>
+              </Link>
+
+              <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
               <DialogTrigger asChild>
                 <Button className="flex items-center space-x-2">
                   <Plus className="w-4 h-4" />
@@ -266,16 +279,13 @@ export default function HomePage() {
                       placeholder="Enter project name..."
                       value={newProjectName}
                       onChange={(e) => setNewProjectName(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && selectedClasses.length > 0 && handleCreateProject()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleCreateProject()}
                       autoFocus
                     />
                   </div>
                   
-                  <ClassSetSelector
-                    onClassSetSelect={handleClassSetSelect}
-                    initialClasses={[
-                      { id: 0, name: 'Object', color: '#ff6b6b' }
-                    ]}
+                  <SimpleClassSelector
+                    onSelectionChange={handleClassSelection}
                   />
                   
                   <div className="flex justify-end space-x-2 pt-4 border-t">
@@ -284,27 +294,26 @@ export default function HomePage() {
                       onClick={() => {
                         setIsNewProjectOpen(false);
                         setNewProjectName('');
-                        setSelectedClassSetId(null);
-                        setSelectedClasses([]);
+                        setSelectedOption('none');
+                        setSelectedClassData({});
                       }}
                     >
                       Cancel
                     </Button>
                     <Button 
                       onClick={handleCreateProject} 
-                      disabled={!newProjectName.trim() || selectedClasses.length === 0}
+                      disabled={!newProjectName.trim()}
                     >
                       Create Project
                     </Button>
                   </div>
                 </div>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            </div>
           </div>
         </div>
-      </header>
-
-      {/* Main Content */}
+      </header>      {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">

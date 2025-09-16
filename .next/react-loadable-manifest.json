@@ -1,19 +1,18 @@
 {
   "app\\labeler\\page.tsx -> @/components/CanvasStage": {
-    "id": 4939,
+    "id": "app\\labeler\\page.tsx -> @/components/CanvasStage",
     "files": [
-      "static/chunks/514.6510b132e25679a5.js",
-      "static/chunks/939.c12bf82d7ecca1c6.js"
+      "static/chunks/_app-pages-browser_components_CanvasStage_tsx.js"
     ]
   },
   "app\\labeler\\page.tsx -> @/lib/cloudinary-pdf": {
-    "id": 7992,
+    "id": "app\\labeler\\page.tsx -> @/lib/cloudinary-pdf",
     "files": [
-      "static/chunks/992.e57679fc8efa1132.js"
+      "static/chunks/_app-pages-browser_lib_cloudinary-pdf_ts.js"
     ]
   },
   "app\\labeler\\page.tsx -> @/lib/store": {
-    "id": 2097,
+    "id": "app\\labeler\\page.tsx -> @/lib/store",
     "files": []
   }
 }
