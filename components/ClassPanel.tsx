@@ -42,7 +42,8 @@ export function ClassPanel() {
   const [newClassName, setNewClassName] = useState('');
   const [draggedClassId, setDraggedClassId] = useState<number | null>(null);
 
-  const classes = currentProject?.classes || [];
+  // Get classes from either embedded classes or class set
+  const classes = currentProject?.classSet?.classes || currentProject?.classes || [];
 
   const handleAddClass = () => {
     if (newClassName.trim()) {

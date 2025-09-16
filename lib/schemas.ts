@@ -1,16 +1,37 @@
 // Database schemas for MongoDB collections
 import { ObjectId } from 'mongodb';
 
-export interface ProjectDocument {
+// New: ClassSet collection for shared class definitions
+export interface ClassSetDocument {
   _id?: ObjectId;
-  id: string; // Custom project ID
-  name: string;
+  id: string; // Custom classSet ID
+  name: string; // e.g., "Vehicle Detection Classes", "Animal Classes"
   description?: string;
   classes: {
     id: string;
     name: string;
     color: string;
   }[];
+  createdAt: number;
+  updatedAt: number;
+  projectCount: number; // Number of projects using this class set
+  isDefault?: boolean; // Mark as default class set
+}
+
+export interface ProjectDocument {
+  _id?: ObjectId;
+  id: string; // Custom project ID
+  name: string;
+  description?: string;
+  
+  // Class management - either embed classes or reference shared set
+  classSetId?: string; // Reference to shared ClassSet (if using shared)
+  classes?: {  // Embedded classes (if not using shared)
+    id: string;
+    name: string;
+    color: string;
+  }[];
+  
   createdAt: number;
   updatedAt: number;
   imageCount: number; // Cache for quick access

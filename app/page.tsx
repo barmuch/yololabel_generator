@@ -21,14 +21,17 @@ import {
   Calendar
 } from 'lucide-react';
 import { getAllProjects, deleteProject, saveProject } from '@/lib/idb';
-import { Project } from '@/lib/types';
+import { Project, ClassDef } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import ClassSetSelector from '@/components/ClassSetSelector';
 
 export default function HomePage() {
   const { loadProject } = useLabelStore();
 
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [selectedClassSetId, setSelectedClassSetId] = useState<string | null>(null);
+  const [selectedClasses, setSelectedClasses] = useState<ClassDef[]>([]);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -66,7 +69,8 @@ export default function HomePage() {
         ...project,
         images: project.images || [],
         bboxes: project.bboxes || [],
-        classes: project.classes || []
+        // For class handling: either use classSet or embedded classes
+        classes: project.classSet?.classes || project.classes || []
       }));
       
       // Sort by updatedAt desc (most recent first)
@@ -92,10 +96,16 @@ export default function HomePage() {
       name: newProjectName.trim(),
       images: [],
       bboxes: [],
-      classes: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+
+    // Add class configuration
+    if (selectedClassSetId) {
+      newProject.classSetId = selectedClassSetId;
+    } else {
+      newProject.classes = selectedClasses;
+    }
 
     try {
       // Save to server (MongoDB) only
@@ -112,6 +122,8 @@ export default function HomePage() {
         // Load project and navigate to labeler
         loadProject(newProject);
         setNewProjectName('');
+        setSelectedClassSetId(null);
+        setSelectedClasses([]);
         setIsNewProjectOpen(false);
         
         // Refresh the project list
@@ -127,6 +139,11 @@ export default function HomePage() {
       console.error('Failed to create project:', error);
       alert('Failed to create project: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
+  };
+
+  const handleClassSetSelect = (classSetId: string | null, classes: ClassDef[]) => {
+    setSelectedClassSetId(classSetId);
+    setSelectedClasses(classes);
   };
 
   const handleLoadProject = async (project: Project) => {
@@ -238,24 +255,46 @@ export default function HomePage() {
                   <span>New Project</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Project name"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleCreateProject()}
-                    autoFocus
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Project Name</label>
+                    <Input
+                      placeholder="Enter project name..."
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && selectedClasses.length > 0 && handleCreateProject()}
+                      autoFocus
+                    />
+                  </div>
+                  
+                  <ClassSetSelector
+                    onClassSetSelect={handleClassSetSelect}
+                    initialClasses={[
+                      { id: 0, name: 'Object', color: '#ff6b6b' }
+                    ]}
                   />
-                  <div className="flex justify-end space-x-2">
-                    <Button variant="outline" onClick={() => setIsNewProjectOpen(false)}>
+                  
+                  <div className="flex justify-end space-x-2 pt-4 border-t">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setIsNewProjectOpen(false);
+                        setNewProjectName('');
+                        setSelectedClassSetId(null);
+                        setSelectedClasses([]);
+                      }}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>
-                      Create
+                    <Button 
+                      onClick={handleCreateProject} 
+                      disabled={!newProjectName.trim() || selectedClasses.length === 0}
+                    >
+                      Create Project
                     </Button>
                   </div>
                 </div>
@@ -324,6 +363,11 @@ export default function HomePage() {
                           <span className="flex items-center">
                             <FolderOpen className="w-4 h-4 mr-1" />
                             {project.classes?.length || 0} classes
+                            {project.classSet && (
+                              <span className="ml-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                Shared: {project.classSet.name}
+                              </span>
+                            )}
                           </span>
                         </div>
                         <div className="flex items-center mt-1">

@@ -7,6 +7,12 @@ import { saveProject as saveProjectToIDB, loadProject as loadProjectFromIDB } fr
 // Track which projects we've fetched server images for to avoid repeated requests
 const fetchedProjectImages = new Set<string>();
 
+// Helper function to get classes from project (either embedded or from class set)
+const getProjectClasses = (project: Project | null): ClassDef[] => {
+  if (!project) return [];
+  return project.classSet?.classes || project.classes || [];
+};
+
 interface LabelStore {
   // Project state
   currentProject: Project | null;
@@ -441,13 +447,19 @@ export const useLabelStore = create<LabelStore>()(
     // Class management
     addClass: (name: string) => {
       set((state) => {
-        if (state.currentProject) {
-          const maxId = Math.max(...state.currentProject.classes.map(c => c.id), -1);
+        if (state.currentProject && !state.currentProject.classSetId) {
+          // Only allow adding classes if not using a shared class set
+          const currentClasses = state.currentProject.classes || [];
+          const maxId = Math.max(...currentClasses.map(c => c.id), -1);
           const newClass: ClassDef = {
             id: maxId + 1,
             name,
             color: generateRandomColor(),
           };
+          
+          if (!state.currentProject.classes) {
+            state.currentProject.classes = [];
+          }
           state.currentProject.classes.push(newClass);
           state.currentProject.updatedAt = Date.now();
           state.hasUnsavedChanges = true;
@@ -457,7 +469,8 @@ export const useLabelStore = create<LabelStore>()(
 
     removeClass: (classId: number) => {
       set((state) => {
-        if (state.currentProject) {
+        if (state.currentProject && !state.currentProject.classSetId && state.currentProject.classes) {
+          // Only allow removing classes if not using a shared class set
           // Remove class
           state.currentProject.classes = state.currentProject.classes.filter(
             cls => cls.id !== classId
@@ -470,8 +483,9 @@ export const useLabelStore = create<LabelStore>()(
 
           // Update selected class if it was removed
           if (state.toolState.selectedClassId === classId) {
-            state.toolState.selectedClassId = state.currentProject.classes.length > 0 
-              ? state.currentProject.classes[0].id 
+            const remainingClasses = getProjectClasses(state.currentProject);
+            state.toolState.selectedClassId = remainingClasses.length > 0 
+              ? remainingClasses[0].id 
               : 0;
           }
 
@@ -483,7 +497,8 @@ export const useLabelStore = create<LabelStore>()(
 
     updateClass: (classId: number, updates: Partial<ClassDef>) => {
       set((state) => {
-        if (state.currentProject) {
+        if (state.currentProject && !state.currentProject.classSetId && state.currentProject.classes) {
+          // Only allow updating classes if not using a shared class set
           const classIndex = state.currentProject.classes.findIndex(cls => cls.id === classId);
           if (classIndex >= 0) {
             Object.assign(state.currentProject.classes[classIndex], updates);
@@ -944,7 +959,7 @@ export const useLabelStore = create<LabelStore>()(
               height: bbox.h,
             },
             classId: bbox.classId,
-            className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+            className: getProjectClasses(state.currentProject).find(c => c.id === bbox.classId)?.name || '',
             confidence: 1.0,
             yolo: {
               x: (bbox.x + bbox.w / 2) / image.width,
@@ -1008,7 +1023,7 @@ export const useLabelStore = create<LabelStore>()(
             height: bbox.h,
           },
           classId: bbox.classId,
-          className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+          className: getProjectClasses(state.currentProject).find(c => c.id === bbox.classId)?.name || '',
           confidence: 1.0,
           yolo: {
             x: (bbox.x + bbox.w / 2) / image.width,
@@ -1069,7 +1084,7 @@ export const useLabelStore = create<LabelStore>()(
             height: bbox.h,
           },
           classId: bbox.classId,
-          className: state.currentProject.classes.find(c => c.id === bbox.classId)?.name || '',
+          className: getProjectClasses(state.currentProject).find(c => c.id === bbox.classId)?.name || '',
           confidence: 1.0,
           yolo: {
             x: (bbox.x + bbox.w / 2) / image.width,

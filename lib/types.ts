@@ -44,6 +44,17 @@ export type ClassDef = {
   color: string;
 };
 
+export type ClassSet = {
+  id: string;
+  name: string;
+  description?: string;
+  classes: ClassDef[];
+  createdAt: number;
+  updatedAt: number;
+  projectCount: number;
+  isDefault?: boolean;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -51,7 +62,12 @@ export type Project = {
   updatedAt: number;
   images: ImageItem[];
   bboxes: BBox[];
-  classes: ClassDef[];
+  
+  // Class management - either use shared set or embedded classes
+  classSetId?: string; // If using shared class set
+  classSet?: ClassSet; // Populated class set data
+  classes?: ClassDef[]; // Embedded classes (if not using shared)
+  
   // Server-provided counts (from API)
   imageCount?: number;
   annotationCount?: number;

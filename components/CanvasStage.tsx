@@ -37,7 +37,10 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   } = useLabelStore();
 
   const bboxes = getBBoxesForImage(image.id);
-  const selectedClass = currentProject?.classes.find(c => c.id === toolState.selectedClassId);
+  
+  // Get classes from either embedded classes or class set
+  const projectClasses = currentProject?.classSet?.classes || currentProject?.classes || [];
+  const selectedClass = projectClasses.find(c => c.id === toolState.selectedClassId);
 
   // Load image with fallback handling
   useEffect(() => {
@@ -306,9 +309,10 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
           const num = parseInt(e.key);
           if (num >= 1 && num <= 9 && currentProject) {
             const classIndex = num - 1;
-            if (currentProject.classes[classIndex]) {
+            const availableClasses = currentProject.classSet?.classes || currentProject.classes || [];
+            if (availableClasses[classIndex]) {
               // Update selectedClassId in store
-              const selectedClassId = currentProject.classes[classIndex].id;
+              const selectedClassId = availableClasses[classIndex].id;
               useLabelStore.getState().setSelectedClass(selectedClassId);
             }
           }
@@ -371,7 +375,8 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
 
           {/* Existing bboxes */}
           {bboxes.map((bbox) => {
-            const classInfo = currentProject?.classes.find(c => c.id === bbox.classId);
+            const availableClasses = currentProject?.classSet?.classes || currentProject?.classes || [];
+            const classInfo = availableClasses.find(c => c.id === bbox.classId);
             const isSelected = bbox.id === toolState.selectedBBoxId;
             
             return (

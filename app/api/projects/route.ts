@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
-import { ProjectDocument } from '@/lib/schemas';
+import { ProjectDocument, ClassSetDocument } from '@/lib/schemas';
 
 export async function GET() {
   try {
@@ -11,16 +11,32 @@ export async function GET() {
     // Get all projects with their image and annotation counts
     const projects = await db.collection('projects').find({}).sort({ updatedAt: -1 }).toArray();
     
-    // Update image and annotation counts for each project
+    // Update image and annotation counts for each project, and populate class sets
     const projectsWithCounts = await Promise.all(
       projects.map(async (project: any) => {
         const imageCount = await db.collection('images').countDocuments({ projectId: project.id });
         const annotationCount = await db.collection('annotations').countDocuments({ projectId: project.id });
         
+        // If project uses a shared class set, populate it
+        let classSet = null;
+        if (project.classSetId) {
+          classSet = await db.collection<ClassSetDocument>('classSets').findOne({ id: project.classSetId });
+        }
+        
         return {
           ...project,
           imageCount,
-          annotationCount
+          annotationCount,
+          classSet: classSet ? {
+            id: classSet.id,
+            name: classSet.name,
+            description: classSet.description,
+            classes: classSet.classes,
+            createdAt: classSet.createdAt,
+            updatedAt: classSet.updatedAt,
+            projectCount: classSet.projectCount,
+            isDefault: classSet.isDefault || false
+          } : null
         };
       })
     );
@@ -54,12 +70,24 @@ export async function POST(request: NextRequest) {
       id: projectData.id,
       name: projectData.name,
       description: projectData.description || '',
-      classes: projectData.classes || [],
       createdAt: projectData.createdAt || Date.now(),
       updatedAt: Date.now(),
       imageCount: projectData.imageCount || 0,
       annotationCount: projectData.annotationCount || 0
     };
+
+    // Handle class management - either shared class set or embedded classes
+    if (projectData.classSetId) {
+      projectDoc.classSetId = projectData.classSetId;
+      
+      // Update the class set usage count
+      await db.collection<ClassSetDocument>('classSets').updateOne(
+        { id: projectData.classSetId },
+        { $inc: { projectCount: 1 } }
+      );
+    } else {
+      projectDoc.classes = projectData.classes || [];
+    }
     
     // Use upsert to handle both create and update
     const result = await db.collection('projects').replaceOne(

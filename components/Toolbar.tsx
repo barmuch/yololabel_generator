@@ -35,7 +35,10 @@ export function Toolbar() {
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
   const bboxCount = currentImageId && currentProject ? getBBoxesForImage(currentImageId)?.length || 0 : 0;
-  const selectedClass = currentProject?.classes.find(c => c.id === toolState.selectedClassId);
+  
+  // Get classes from either embedded classes or class set
+  const projectClasses = currentProject?.classSet?.classes || currentProject?.classes || [];
+  const selectedClass = projectClasses.find(c => c.id === toolState.selectedClassId);
 
   const handleZoomIn = () => {
     const newScale = Math.min(viewport.scale * 1.2, 5);

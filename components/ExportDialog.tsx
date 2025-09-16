@@ -47,7 +47,8 @@ export function ExportDialog({ trigger }: ExportDialogProps) {
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
   const allBboxes = currentProject?.bboxes || [];
-  const classes = currentProject?.classes || [];
+  // Get classes from either embedded classes or class set
+  const classes = currentProject?.classSet?.classes || currentProject?.classes || [];
 
   const handleExportSingle = async () => {
     if (!currentImage) return;
