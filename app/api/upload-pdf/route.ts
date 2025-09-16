@@ -35,7 +35,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only PDF files are allowed' }, { status: 400 });
     }
 
-    console.log('Starting PDF upload:', { name: file.name, size: file.size });
+    // Validate file size (Vercel has 4.5MB limit for serverless functions)
+    const maxSize = 4.5 * 1024 * 1024; // 4.5MB in bytes
+    if (file.size > maxSize) {
+      return NextResponse.json({ 
+        error: 'File too large', 
+        details: `PDF file size (${Math.round(file.size / 1024 / 1024 * 100) / 100}MB) exceeds the maximum limit of 4.5MB for Vercel deployment. Please use a smaller PDF file.`,
+        maxSizeMB: 4.5,
+        currentSizeMB: Math.round(file.size / 1024 / 1024 * 100) / 100
+      }, { status: 413 });
+    }
+
+    console.log('Starting PDF upload:', { name: file.name, size: file.size, sizeMB: Math.round(file.size / 1024 / 1024 * 100) / 100 });
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();

@@ -1,4 +1,8 @@
 {
+  "/page": "app/page.js",
+  "/labeler/page": "app/labeler/page.js",
+  "/api/upload-complete/route": "app/api/upload-complete/route.js",
   "/api/projects/route": "app/api/projects/route.js",
-  "/page": "app/page.js"
+  "/api/images/route": "app/api/images/route.js",
+  "/api/annotations/route": "app/api/annotations/route.js"
 }

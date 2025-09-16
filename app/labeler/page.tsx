@@ -215,6 +215,22 @@ export default function LabelerPage() {
 
     for (const pdfFile of pdfFiles) {
       try {
+        // Validate file size before upload (Vercel has 4.5MB limit)
+        const maxSize = 4.5 * 1024 * 1024; // 4.5MB in bytes
+        if (pdfFile.size > maxSize) {
+          const currentSizeMB = Math.round(pdfFile.size / 1024 / 1024 * 100) / 100;
+          alert(`❌ File "${pdfFile.name}" is too large (${currentSizeMB}MB). Maximum size allowed is 4.5MB for Vercel deployment. Please use a smaller PDF file.`);
+          continue; // Skip this file and continue with others
+        }
+
+        // Validate file type
+        if (pdfFile.type !== 'application/pdf') {
+          alert(`❌ File "${pdfFile.name}" is not a PDF file. Only PDF files are allowed.`);
+          continue; // Skip this file and continue with others
+        }
+
+        console.log(`📄 Starting upload for: ${pdfFile.name} (${Math.round(pdfFile.size / 1024 / 1024 * 100) / 100}MB)`);
+
         const formData = new FormData();
         formData.append('file', pdfFile);
         
@@ -224,7 +240,21 @@ export default function LabelerPage() {
         });
         
         if (!response.ok) {
-          throw new Error(`Failed to upload PDF: ${response.statusText}`);
+          let errorMessage = `Failed to upload PDF: ${response.statusText}`;
+          
+          // Handle specific error cases
+          if (response.status === 413) {
+            errorMessage = `File "${pdfFile.name}" is too large for Vercel deployment. Maximum size is 4.5MB.`;
+          } else if (response.status === 400) {
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.details || errorData.error || errorMessage;
+            } catch {
+              // Fall back to default message if JSON parsing fails
+            }
+          }
+          
+          throw new Error(errorMessage);
         }
         
         const result = await response.json();

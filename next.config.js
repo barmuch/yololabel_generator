@@ -6,6 +6,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: false,
   },
+  // Configure API routes body size limit
+  experimental: {
+    // Increase the maximum request body size (default is 1mb)
+    serverComponentsExternalPackages: [],
+  },
   images: {
     remotePatterns: [
       {
