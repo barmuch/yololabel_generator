@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 import { useLabelStore } from '@/lib/store';
 import { ClassPanel } from '@/components/ClassPanel';
 import { ImageStrip } from '@/components/ImageStrip';
@@ -210,25 +211,35 @@ export default function LabelerPage() {
   const handlePdfUpload = async (pdfFiles: File[]) => {
     if (!currentProject) {
       console.error('No current project for PDF upload');
+      toast.error('No project selected for PDF upload');
       return;
     }
 
     for (const pdfFile of pdfFiles) {
+      const toastId = toast.loading(`Processing PDF: ${pdfFile.name}...`);
+      
       try {
         // Validate file size before upload (Vercel has 4.5MB limit)
         const maxSize = 4.5 * 1024 * 1024; // 4.5MB in bytes
         if (pdfFile.size > maxSize) {
           const currentSizeMB = Math.round(pdfFile.size / 1024 / 1024 * 100) / 100;
-          alert(`❌ File "${pdfFile.name}" is too large (${currentSizeMB}MB). Maximum size allowed is 4.5MB for Vercel deployment. Please use a smaller PDF file.`);
+          toast.error(`File "${pdfFile.name}" is too large (${currentSizeMB}MB). Maximum size allowed is 4.5MB.`, {
+            id: toastId,
+            duration: 5000
+          });
           continue; // Skip this file and continue with others
         }
 
         // Validate file type
         if (pdfFile.type !== 'application/pdf') {
-          alert(`❌ File "${pdfFile.name}" is not a PDF file. Only PDF files are allowed.`);
+          toast.error(`File "${pdfFile.name}" is not a PDF file. Only PDF files are allowed.`, {
+            id: toastId,
+            duration: 5000
+          });
           continue; // Skip this file and continue with others
         }
 
+        toast.loading(`Uploading PDF: ${pdfFile.name}...`, { id: toastId });
         console.log(`📄 Starting upload for: ${pdfFile.name} (${Math.round(pdfFile.size / 1024 / 1024 * 100) / 100}MB)`);
 
         const formData = new FormData();
@@ -249,13 +260,19 @@ export default function LabelerPage() {
             try {
               const errorData = await response.json();
               errorMessage = errorData.details || errorData.error || errorMessage;
-            } catch {
-              // Fall back to default message if JSON parsing fails
+            } catch (e) {
+              // Keep default error message if JSON parsing fails
             }
           }
           
-          throw new Error(errorMessage);
+          toast.error(errorMessage, { 
+            id: toastId,
+            duration: 5000 
+          });
+          continue;
         }
+
+        toast.loading(`Converting PDF pages to images...`, { id: toastId });
         
         const result = await response.json();
         console.log('PDF uploaded successfully:', result);
@@ -319,6 +336,11 @@ export default function LabelerPage() {
           // Add to current project using the store's addImagesFromData function
           await addImagesFromData(imageItems);
           
+          toast.success(`PDF "${pdfFile.name}" successfully processed: ${imageItems.length} pages added`, {
+            id: toastId,
+            duration: 4000
+          });
+          
           console.log('Created image items:', imageItems.map((item: any) => ({
             id: item.id,
             name: item.name,
@@ -328,6 +350,7 @@ export default function LabelerPage() {
           
         } catch (saveError) {
           console.error('❌ Failed to save PDF to database:', saveError);
+          toast.loading(`Creating PDF pages locally (fallback mode)...`, { id: toastId });
           
           // Fallback: Create image items locally without database persistence
           console.log('📝 Creating PDF pages locally as fallback...');
@@ -399,6 +422,11 @@ export default function LabelerPage() {
           // Add to current project using the store's addImagesFromData function (fallback mode)
           await addImagesFromData(imageItems);
           
+          toast.warning(`PDF "${pdfFile.name}" processed in fallback mode: ${imageItems.length} pages added (database save failed)`, {
+            id: toastId,
+            duration: 5000
+          });
+          
           console.log('Created image items (fallback):', imageItems.map((item: any) => ({
             id: item.id,
             name: item.name,
@@ -409,7 +437,10 @@ export default function LabelerPage() {
         
       } catch (error) {
         console.error('Error uploading PDF:', error);
-        alert(`Failed to upload PDF: ${pdfFile.name}`);
+        toast.error(`Failed to upload PDF: ${pdfFile.name}. ${error instanceof Error ? error.message : 'Unknown error'}`, {
+          id: toastId,
+          duration: 5000
+        });
       }
     }
   };
@@ -426,15 +457,23 @@ export default function LabelerPage() {
     const pdfFiles = files.filter(file => file.type === 'application/pdf');
     
     if (imageFiles.length === 0 && pdfFiles.length === 0) {
-      alert('No valid image or PDF files selected');
+      toast.error('No valid image or PDF files selected');
       return;
     }
+
+    let toastId: string | number | undefined;
 
     try {
       // Handle regular images
       if (imageFiles.length > 0) {
+        toastId = toast.loading(`Uploading ${imageFiles.length} image${imageFiles.length > 1 ? 's' : ''}...`);
         console.log('Uploading images:', imageFiles.map(f => f.name));
         await addImages(imageFiles);
+        
+        toast.success(`Successfully uploaded ${imageFiles.length} image${imageFiles.length > 1 ? 's' : ''}`, {
+          id: toastId,
+          duration: 3000
+        });
       }
       
       // Handle PDF files
@@ -446,7 +485,18 @@ export default function LabelerPage() {
       console.log('All files processed successfully');
     } catch (error) {
       console.error('Failed to process files:', error);
-      alert('Failed to process files');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      if (toastId) {
+        toast.error(`Failed to process files: ${errorMessage}`, {
+          id: toastId,
+          duration: 5000
+        });
+      } else {
+        toast.error(`Failed to process files: ${errorMessage}`, {
+          duration: 5000
+        });
+      }
     }
 
     // Reset input
@@ -468,15 +518,23 @@ export default function LabelerPage() {
     const pdfFiles = files.filter(file => file.type === 'application/pdf');
     
     if (imageFiles.length === 0 && pdfFiles.length === 0) {
-      alert('No valid image or PDF files found');
+      toast.error('No valid image or PDF files found in dropped files');
       return;
     }
+
+    let toastId: string | number | undefined;
 
     try {
       // Handle regular images
       if (imageFiles.length > 0) {
+        toastId = toast.loading(`Processing ${imageFiles.length} dropped image${imageFiles.length > 1 ? 's' : ''}...`);
         console.log('Uploading dropped images:', imageFiles.map(f => f.name));
         await addImages(imageFiles);
+        
+        toast.success(`Successfully processed ${imageFiles.length} dropped image${imageFiles.length > 1 ? 's' : ''}`, {
+          id: toastId,
+          duration: 3000
+        });
       }
       
       // Handle PDF files
@@ -486,11 +544,20 @@ export default function LabelerPage() {
       }
       
       console.log('All dropped files processed successfully');
-      await addImages(imageFiles);
-      console.log('All dropped files processed successfully');
     } catch (error) {
       console.error('Failed to process dropped files:', error);
-      alert('Failed to process dropped files');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      if (toastId) {
+        toast.error(`Failed to process dropped files: ${errorMessage}`, {
+          id: toastId,
+          duration: 5000
+        });
+      } else {
+        toast.error(`Failed to process dropped files: ${errorMessage}`, {
+          duration: 5000
+        });
+      }
     }
   };
 

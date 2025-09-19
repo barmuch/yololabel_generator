@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import Konva from 'konva';
@@ -14,6 +14,43 @@ interface CanvasStageProps {
   containerHeight: number;
 }
 
+// Memoized BBox component for better performance
+const BBoxComponent = React.memo(({ 
+  bbox, 
+  classInfo, 
+  isSelected, 
+  onBBoxClick, 
+  onBBoxTransform,
+  toolMode
+}: {
+  bbox: BBox;
+  classInfo: any;
+  isSelected: boolean;
+  onBBoxClick: (id: string) => void;
+  onBBoxTransform: (id: string, attrs: any) => void;
+  toolMode: string;
+}) => (
+  <Rect
+    id={`bbox-${bbox.id}`}
+    x={bbox.x}
+    y={bbox.y}
+    width={bbox.w}
+    height={bbox.h}
+    stroke={classInfo?.color || '#ff0000'}
+    strokeWidth={isSelected ? 3 : 2}
+    fill="transparent"
+    onClick={() => onBBoxClick(bbox.id)}
+    onTap={() => onBBoxClick(bbox.id)}
+    onTransform={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
+    onDragEnd={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
+    draggable={toolMode === 'select'}
+    opacity={bbox.hidden ? 0.3 : 1}
+    listening={!bbox.locked}
+    perfectDrawEnabled={false} // Performance optimization
+    shadowForStrokeEnabled={false} // Performance optimization
+  />
+));
+
 export function CanvasStage({ image, containerWidth, containerHeight }: CanvasStageProps) {
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -22,6 +59,11 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentRect, setCurrentRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  
+  // Performance optimization: throttle zoom updates
+  const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastWheelTimeRef = useRef<number>(0);
 
   const {
     getBBoxesForImage,
@@ -42,13 +84,19 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   const projectClasses = currentProject?.classSet?.classes || currentProject?.classes || [];
   const selectedClass = projectClasses.find(c => c.id === toolState.selectedClassId);
 
+  // Memoize zoom constraints for performance
+  const zoomConstraints = useMemo(() => {
+    if (!image.width || !image.height) return { minScale: 0.1, maxScale: 5 };
+    
+    const minScale = Math.min(containerWidth / image.width, containerHeight / image.height) * 0.1;
+    const maxScale = 5;
+    
+    return { minScale, maxScale };
+  }, [image.width, image.height, containerWidth, containerHeight]);
+
   // Load image with fallback handling
   useEffect(() => {
     const loadImageWithFallback = () => {
-      // Determine the best image source with priority order:
-      // 1. Cloudinary URL (most reliable)
-      // 2. Generic URL field
-      // 3. Blob URL (fallback, but likely invalid after refresh)
       const primarySrc = image.cloudinary?.secure_url || image.url;
       const fallbackSrc = image.blobUrl;
       
@@ -65,7 +113,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         // Calculate initial scale to fit image in container
         const scaleX = containerWidth / img.width;
         const scaleY = containerHeight / img.height;
-        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up
+        const scale = Math.min(scaleX, scaleY, 1);
         
         console.log('Setting viewport with scale:', scale);
         setViewport({
@@ -79,9 +127,6 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
       
       img.onerror = (e) => {
         console.error('Failed to load image:', e);
-        console.error('Image src:', img.src);
-        
-        // Try fallback if available and different from current src
         if (fallbackSrc && img.src !== fallbackSrc) {
           console.log('Trying fallback URL:', fallbackSrc);
           img.src = fallbackSrc;
@@ -91,7 +136,6 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         }
       };
       
-      // Use primary source first
       img.src = primarySrc;
     };
     
@@ -149,26 +193,22 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    const imagePos = stageToImage(pos.x, pos.y);
-
-    // Check if clicked on background (image or stage)
-    if (e.target === stage || e.target.name() === 'background-image') {
-      if (toolState.mode === 'draw') {
-        // Start drawing new bbox
+    // Check if clicked on background
+    if (e.target === e.target.getStage()) {
+      setSelectedBBox(null);
+      
+      if (toolState.mode === 'draw' && selectedClass) {
+        const imagePos = stageToImage(pos.x, pos.y);
         setIsDrawing(true);
         setStartPoint(imagePos);
         setCurrentRect({ x: imagePos.x, y: imagePos.y, w: 0, h: 0 });
-        setSelectedBBox(null);
-      } else {
-        // Clear selection
-        setSelectedBBox(null);
       }
     }
-  }, [toolState.mode, stageToImage, setSelectedBBox]);
+  }, [toolState.mode, selectedClass, stageToImage, setSelectedBBox]);
 
   // Handle mouse move
   const handleMouseMove = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    if (!isDrawing || !startPoint || toolState.mode !== 'draw') return;
+    if (!isDrawing || !startPoint) return;
 
     const stage = e.target.getStage();
     if (!stage) return;
@@ -177,87 +217,97 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     if (!pos) return;
 
     const imagePos = stageToImage(pos.x, pos.y);
+    const width = imagePos.x - startPoint.x;
+    const height = imagePos.y - startPoint.y;
 
-    // Calculate rectangle dimensions
-    const x = Math.min(startPoint.x, imagePos.x);
-    const y = Math.min(startPoint.y, imagePos.y);
-    const w = Math.abs(imagePos.x - startPoint.x);
-    const h = Math.abs(imagePos.y - startPoint.y);
-
-    // Clamp to image boundaries
-    const clampedX = clamp(x, 0, image.width);
-    const clampedY = clamp(y, 0, image.height);
-    const clampedW = clamp(w, 0, image.width - clampedX);
-    const clampedH = clamp(h, 0, image.height - clampedY);
-
-    setCurrentRect({ x: clampedX, y: clampedY, w: clampedW, h: clampedH });
-  }, [isDrawing, startPoint, toolState.mode, stageToImage, image.width, image.height]);
+    setCurrentRect({
+      x: width < 0 ? imagePos.x : startPoint.x,
+      y: height < 0 ? imagePos.y : startPoint.y,
+      w: Math.abs(width),
+      h: Math.abs(height),
+    });
+  }, [isDrawing, startPoint, stageToImage]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
-    if (isDrawing && currentRect && currentRect.w > 5 && currentRect.h > 5) {
-      // Create new bbox
-      const newBBoxId = addBBox({
-        imageId: image.id,
-        classId: toolState.selectedClassId,
+    if (isDrawing && currentRect && selectedClass && currentRect.w > 10 && currentRect.h > 10) {
+      addBBox({
         x: currentRect.x,
         y: currentRect.y,
         w: currentRect.w,
         h: currentRect.h,
+        classId: selectedClass.id,
+        imageId: image.id,
       });
-      setSelectedBBox(newBBoxId);
     }
 
-    // Reset drawing state
     setIsDrawing(false);
     setStartPoint(null);
     setCurrentRect(null);
-  }, [isDrawing, currentRect, addBBox, image.id, toolState.selectedClassId, setSelectedBBox]);
+  }, [isDrawing, currentRect, selectedClass, addBBox, image.id]);
 
   // Handle bbox click
   const handleBBoxClick = useCallback((bboxId: string) => {
-    if (toolState.mode === 'select') {
-      setSelectedBBox(bboxId);
-    }
-  }, [toolState.mode, setSelectedBBox]);
+    setSelectedBBox(bboxId);
+  }, [setSelectedBBox]);
 
   // Handle bbox transform
   const handleBBoxTransform = useCallback((bboxId: string, newAttrs: any) => {
-    const imagePos = stageToImage(newAttrs.x, newAttrs.y);
     const scaledWidth = newAttrs.width * newAttrs.scaleX / viewport.scale;
     const scaledHeight = newAttrs.height * newAttrs.scaleY / viewport.scale;
 
-    // Clamp to image boundaries
-    const x = clamp(imagePos.x, 0, image.width - scaledWidth);
-    const y = clamp(imagePos.y, 0, image.height - scaledHeight);
-    const w = clamp(scaledWidth, 5, image.width - x);
-    const h = clamp(scaledHeight, 5, image.height - y);
+    updateBBox(bboxId, {
+      x: newAttrs.x / viewport.scale,
+      y: newAttrs.y / viewport.scale,
+      w: scaledWidth,
+      h: scaledHeight,
+    });
+  }, [updateBBox, viewport.scale]);
 
-    updateBBox(bboxId, { x, y, w, h });
-  }, [stageToImage, viewport.scale, image.width, image.height, updateBBox]);
-
-  // Handle wheel zoom
+  // Optimized wheel handler with throttling and RAF
   const handleWheel = useCallback((e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
 
     const stage = e.target.getStage();
     if (!stage) return;
 
+    const now = Date.now();
+    const timeSinceLastWheel = now - lastWheelTimeRef.current;
+    
+    // Throttle wheel events to max 60fps
+    if (timeSinceLastWheel < 16) {
+      return;
+    }
+    
+    lastWheelTimeRef.current = now;
+
+    // Cancel any pending wheel updates
+    if (wheelTimeoutRef.current) {
+      clearTimeout(wheelTimeoutRef.current);
+    }
+    
+    // Cancel any pending animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
     const oldScale = viewport.scale;
     const pointer = stage.getPointerPosition() || { x: containerWidth / 2, y: containerHeight / 2 };
 
-    // Calculate new scale
-    const scaleBy = 1.05;
-    const newScale = e.evt.deltaY > 0 
-      ? oldScale / scaleBy 
-      : oldScale * scaleBy;
+    // Optimized scale calculation with faster scaling
+    const scaleBy = e.evt.ctrlKey ? 1.15 : 1.08; // Faster zoom with Ctrl
+    const direction = e.evt.deltaY > 0 ? -1 : 1;
+    const newScale = oldScale * Math.pow(scaleBy, direction);
 
-    // Limit zoom range
-    const minScale = Math.min(containerWidth / image.width, containerHeight / image.height) * 0.1;
-    const maxScale = 5;
-    const clampedScale = clamp(newScale, minScale, maxScale);
+    // Use memoized constraints
+    const clampedScale = clamp(newScale, zoomConstraints.minScale, zoomConstraints.maxScale);
 
-    // Calculate new position to zoom towards pointer
+    // Early exit if scale hasn't changed significantly
+    if (Math.abs(clampedScale - oldScale) < 0.001) {
+      return;
+    }
+
+    // Calculate new position to zoom towards pointer (optimized)
     const mousePointTo = {
       x: (pointer.x - viewport.x) / oldScale,
       y: (pointer.y - viewport.y) / oldScale,
@@ -268,18 +318,24 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
       y: pointer.y - mousePointTo.y * clampedScale,
     };
 
-    setViewport({
-      scale: clampedScale,
-      x: newPos.x,
-      y: newPos.y,
+    // Use requestAnimationFrame for smooth updates
+    animationFrameRef.current = requestAnimationFrame(() => {
+      setViewport({
+        scale: clampedScale,
+        x: newPos.x,
+        y: newPos.y,
+        width: containerWidth,
+        height: containerHeight,
+      });
     });
-  }, [viewport, containerWidth, containerHeight, image.width, image.height, setViewport]);
+
+  }, [viewport, containerWidth, containerHeight, zoomConstraints, setViewport]);
 
   // Handle key presses
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return; // Don't handle keys when input is focused
+        return;
       }
 
       switch (e.key) {
@@ -290,13 +346,8 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
             setSelectedBBox(null);
           }
           break;
-        case 'n':
-        case 'N':
-          setToolMode('draw');
-          break;
         case 'Escape':
           setSelectedBBox(null);
-          setToolMode('select');
           break;
         case ' ':
           if (!e.repeat) {
@@ -305,13 +356,11 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
           e.preventDefault();
           break;
         default:
-          // Number keys for class selection
           const num = parseInt(e.key);
           if (num >= 1 && num <= 9 && currentProject) {
             const classIndex = num - 1;
             const availableClasses = currentProject.classSet?.classes || currentProject.classes || [];
             if (availableClasses[classIndex]) {
-              // Update selectedClassId in store
               const selectedClassId = availableClasses[classIndex].id;
               useLabelStore.getState().setSelectedClass(selectedClassId);
             }
@@ -335,16 +384,45 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     };
   }, [toolState.selectedBBoxId, removeBBox, setSelectedBBox, setToolMode, currentProject]);
 
+  // Cleanup performance refs on unmount
+  useEffect(() => {
+    return () => {
+      if (wheelTimeoutRef.current) {
+        clearTimeout(wheelTimeoutRef.current);
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  // Memoize bbox list to prevent unnecessary re-renders
+  const memoizedBBoxes = useMemo(() => {
+    return bboxes.map((bbox) => {
+      const classInfo = projectClasses.find(c => c.id === bbox.classId);
+      const isSelected = bbox.id === toolState.selectedBBoxId;
+      
+      return (
+        <BBoxComponent
+          key={bbox.id}
+          bbox={bbox}
+          classInfo={classInfo}
+          isSelected={isSelected}
+          onBBoxClick={handleBBoxClick}
+          onBBoxTransform={handleBBoxTransform}
+          toolMode={toolState.mode}
+        />
+      );
+    });
+  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform]);
+
   if (!konvaImage) {
-    console.log('KonvaImage is null, showing loading state');
     return (
       <div className="flex items-center justify-center w-full h-full">
         <div className="text-muted-foreground">Loading image...</div>
       </div>
     );
   }
-
-  console.log('Rendering CanvasStage with image:', image.name, 'containerSize:', containerWidth, 'x', containerHeight);
 
   return (
     <div className="w-full h-full overflow-hidden">
@@ -361,8 +439,15 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         y={toolState.mode === 'pan' ? undefined : viewport.y}
         scaleX={viewport.scale}
         scaleY={viewport.scale}
+        // Performance optimizations
+        pixelRatio={window.devicePixelRatio || 1}
+        listening={true}
       >
-        <Layer>
+        <Layer
+          // Performance optimizations for layer
+          clearBeforeDraw={true}
+          hitGraphEnabled={false}
+        >
           {/* Background image */}
           <KonvaImage
             name="background-image"
@@ -371,87 +456,44 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
             y={0}
             width={image.width}
             height={image.height}
+            perfectDrawEnabled={false} // Performance optimization
           />
 
-          {/* Existing bboxes */}
-          {bboxes.map((bbox) => {
-            const availableClasses = currentProject?.classSet?.classes || currentProject?.classes || [];
-            const classInfo = availableClasses.find(c => c.id === bbox.classId);
-            const isSelected = bbox.id === toolState.selectedBBoxId;
-            
-            return (
-              <React.Fragment key={bbox.id}>
-                <Rect
-                  id={`bbox-${bbox.id}`}
-                  x={bbox.x}
-                  y={bbox.y}
-                  width={bbox.w}
-                  height={bbox.h}
-                  stroke={classInfo?.color || '#ff0000'}
-                  strokeWidth={isSelected ? 3 : 2}
-                  fill="transparent"
-                  onClick={() => handleBBoxClick(bbox.id)}
-                  onTap={() => handleBBoxClick(bbox.id)}
-                  onTransform={(e) => handleBBoxTransform(bbox.id, e.target.attrs)}
-                  onDragEnd={(e) => handleBBoxTransform(bbox.id, e.target.attrs)}
-                  draggable={toolState.mode === 'select'}
-                  opacity={bbox.hidden ? 0.3 : 1}
-                  listening={!bbox.locked}
-                />
-                
-                {/* Class label */}
-                {classInfo && (
-                  <Rect
-                    x={bbox.x}
-                    y={bbox.y - 20}
-                    width={classInfo.name.length * 8}
-                    height={18}
-                    fill={classInfo.color}
-                    opacity={0.8}
-                  />
-                )}
-              </React.Fragment>
-            );
-          })}
+          {/* Existing bboxes - using memoized components */}
+          {memoizedBBoxes}
 
           {/* Current drawing rectangle */}
-          {isDrawing && currentRect && selectedClass && (
+          {currentRect && (
             <Rect
               x={currentRect.x}
               y={currentRect.y}
               width={currentRect.w}
               height={currentRect.h}
-              stroke={selectedClass.color}
+              stroke={selectedClass?.color || '#ff0000'}
               strokeWidth={2}
               fill="transparent"
               dash={[5, 5]}
+              listening={false}
+              perfectDrawEnabled={false}
             />
           )}
 
           {/* Transformer for selected bbox */}
-          {toolState.mode === 'select' && (
-            <Transformer
-              ref={transformerRef}
-              keepRatio={false}
-              enabledAnchors={[
-                'top-left',
-                'top-right',
-                'bottom-left',
-                'bottom-right',
-                'top-center',
-                'bottom-center',
-                'middle-left',
-                'middle-right',
-              ]}
-              boundBoxFunc={(oldBox, newBox) => {
-                // Limit resize
-                if (newBox.width < 5 || newBox.height < 5) {
-                  return oldBox;
-                }
-                return newBox;
-              }}
-            />
-          )}
+          <Transformer
+            ref={transformerRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              // Limit resize
+              if (newBox.width < 10 || newBox.height < 10) {
+                return oldBox;
+              }
+              return newBox;
+            }}
+            anchorStroke="#4F46E5"
+            anchorFill="#fff"
+            anchorSize={8}
+            borderStroke="#4F46E5"
+            borderDash={[3, 3]}
+          />
         </Layer>
       </Stage>
     </div>
