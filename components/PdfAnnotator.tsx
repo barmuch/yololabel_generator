@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -161,9 +162,11 @@ export function PdfAnnotator({ classes, onSave }: PdfAnnotatorProps) {
                   onClick={() => setCurrentPage(page.pageNumber)}
                 >
                   <div className="flex space-x-3">
-                    <img
+                    <Image
                       src={page.thumbnailUrl}
                       alt={`Page ${page.pageNumber}`}
+                      width={64}
+                      height={80}
                       className="w-16 h-20 object-cover rounded border"
                     />
                     <div className="flex-1 min-w-0">

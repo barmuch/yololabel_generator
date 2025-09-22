@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ClassSet, ClassDef } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Palette, Plus, Settings } from 'lucide-react';
@@ -17,13 +17,29 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
   ]);
   const [loading, setLoading] = useState(false);
 
+  const handleSelectionChange = useCallback(() => {
+    switch (selectedOption) {
+      case 'none':
+        onSelectionChange('none');
+        break;
+      case 'template':
+        if (selectedTemplateId) {
+          onSelectionChange('template', { classSetId: selectedTemplateId });
+        }
+        break;
+      case 'custom':
+        onSelectionChange('custom', { classes: customClasses });
+        break;
+    }
+  }, [selectedOption, selectedTemplateId, customClasses, onSelectionChange]);
+
   useEffect(() => {
     fetchTemplates();
   }, []);
 
   useEffect(() => {
     handleSelectionChange();
-  }, [selectedOption, selectedTemplateId, customClasses]);
+  }, [handleSelectionChange]);
 
   const fetchTemplates = async () => {
     try {
@@ -38,22 +54,6 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
       console.error('Error fetching templates:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSelectionChange = () => {
-    switch (selectedOption) {
-      case 'none':
-        onSelectionChange('none');
-        break;
-      case 'template':
-        if (selectedTemplateId) {
-          onSelectionChange('template', { classSetId: selectedTemplateId });
-        }
-        break;
-      case 'custom':
-        onSelectionChange('custom', { classes: customClasses });
-        break;
     }
   };
 

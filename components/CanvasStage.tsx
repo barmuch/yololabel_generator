@@ -15,7 +15,7 @@ interface CanvasStageProps {
 }
 
 // Memoized BBox component for better performance
-const BBoxComponent = React.memo(({ 
+const BBoxComponent = React.memo(function BBoxComponent({ 
   bbox, 
   classInfo, 
   isSelected, 
@@ -29,27 +29,29 @@ const BBoxComponent = React.memo(({
   onBBoxClick: (id: string) => void;
   onBBoxTransform: (id: string, attrs: any) => void;
   toolMode: string;
-}) => (
-  <Rect
-    id={`bbox-${bbox.id}`}
-    x={bbox.x}
-    y={bbox.y}
-    width={bbox.w}
-    height={bbox.h}
-    stroke={classInfo?.color || '#ff0000'}
-    strokeWidth={isSelected ? 3 : 2}
-    fill="transparent"
-    onClick={() => onBBoxClick(bbox.id)}
-    onTap={() => onBBoxClick(bbox.id)}
-    onTransform={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
-    onDragEnd={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
-    draggable={toolMode === 'select'}
-    opacity={bbox.hidden ? 0.3 : 1}
-    listening={!bbox.locked}
-    perfectDrawEnabled={false} // Performance optimization
-    shadowForStrokeEnabled={false} // Performance optimization
-  />
-));
+}) {
+  return (
+    <Rect
+      id={`bbox-${bbox.id}`}
+      x={bbox.x}
+      y={bbox.y}
+      width={bbox.w}
+      height={bbox.h}
+      stroke={classInfo?.color || '#ff0000'}
+      strokeWidth={isSelected ? 3 : 2}
+      fill="transparent"
+      onClick={() => onBBoxClick(bbox.id)}
+      onTap={() => onBBoxClick(bbox.id)}
+      onTransform={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
+      onDragEnd={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
+      draggable={toolMode === 'select'}
+      opacity={bbox.hidden ? 0.3 : 1}
+      listening={!bbox.locked}
+      perfectDrawEnabled={false} // Performance optimization
+      shadowForStrokeEnabled={false} // Performance optimization
+    />
+  );
+});
 
 export function CanvasStage({ image, containerWidth, containerHeight }: CanvasStageProps) {
   const stageRef = useRef<Konva.Stage>(null);
