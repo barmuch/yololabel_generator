@@ -9,7 +9,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogDescription 
 } from '@/components/ui/dialog';
 import { 
   Plus, 
@@ -186,6 +187,9 @@ export default function TemplateManagementPage() {
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Create New Class Template</DialogTitle>
+                  <DialogDescription>
+                    Create a reusable template with predefined classes for faster project setup.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>

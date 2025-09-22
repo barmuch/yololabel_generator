@@ -157,7 +157,6 @@ export function ImageStrip() {
               >
                 {/* Thumbnail */}
                 <div className="relative w-28 h-20 bg-muted">
-                  {/* Prefer Cloudinary URL, fall back to generic url, then blobUrl */}
                   {(() => {
                     const src = image.cloudinary?.secure_url ?? image.url ?? image.blobUrl ?? '';
                     

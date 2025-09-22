@@ -9,7 +9,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogDescription 
 } from '@/components/ui/dialog';
 import { 
   Plus, 
@@ -166,6 +167,9 @@ export function ClassPanel() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Class</DialogTitle>
+                <DialogDescription>
+                  Create a new class for labeling objects in your images.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <Input
@@ -383,6 +387,9 @@ export function ClassPanel() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Class</DialogTitle>
+            <DialogDescription>
+              Modify the class name and color. Click the color box to change the color.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center space-x-3">

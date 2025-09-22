@@ -9,7 +9,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogDescription 
 } from '@/components/ui/dialog';
 import { 
   FolderOpen, 
@@ -271,6 +272,9 @@ export default function HomePage() {
               <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>
+                  <DialogDescription>
+                    Create a new labeling project to start annotating your images.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6">
                   <div>
