@@ -46,6 +46,7 @@ export default function LabelerPage() {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fetchedProjectsRef = useRef<Set<string>>(new Set()); // Track which projects we've fetched images for
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
 
@@ -98,17 +99,18 @@ export default function LabelerPage() {
       
       loadRecentProject();
     }
-  }, [currentProject, currentImageId, currentImage, isLoading, loadProject]);
+  }, [currentProject, currentImageId, isLoading, loadProject]);
 
   // Update project name state when project changes and explicitly fetch images
   useEffect(() => {
     if (currentProject) {
       setProjectName(currentProject.name);
       
-      // Explicitly fetch images from server if project has no images yet
+      // Explicitly fetch images from server if project has no images yet and we haven't fetched for this project
       const fetchImagesIfNeeded = async () => {
-        if (currentProject.images.length === 0) {
+        if (currentProject.images.length === 0 && !fetchedProjectsRef.current.has(currentProject.id)) {
           console.log('Project has no images, fetching from server...');
+          fetchedProjectsRef.current.add(currentProject.id); // Mark as fetched to prevent future fetches
           try {
             // Import the store function dynamically to avoid circular imports
             const { useLabelStore } = await import('@/lib/store');
@@ -116,6 +118,8 @@ export default function LabelerPage() {
             console.log('Images fetched from server for project:', currentProject.id);
           } catch (error) {
             console.error('Failed to fetch images from server:', error);
+            // Remove from fetched set on error so we can retry
+            fetchedProjectsRef.current.delete(currentProject.id);
           }
         } else {
           console.log('Project already has', currentProject.images.length, 'images loaded');
@@ -124,7 +128,7 @@ export default function LabelerPage() {
       
       fetchImagesIfNeeded();
     }
-  }, [currentProject]);
+  }, [currentProject?.id, currentProject?.name]); // Only depend on project ID and name, not the entire project object
 
   // Debug images loading
   useEffect(() => {
@@ -151,7 +155,7 @@ export default function LabelerPage() {
         setCurrentImage(currentProject.images[0].id);
       }, 100);
     }
-  }, [currentProject, currentImageId, setCurrentImage]);
+  }, [currentProject?.id, currentProject?.images?.length, currentImageId, setCurrentImage]); // More specific dependencies
 
   // Handle container resize
   useEffect(() => {
