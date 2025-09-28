@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { useLabelStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +28,11 @@ import { Project, ClassDef } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SimpleClassSelector from '@/components/SimpleClassSelector';
+import { signOut } from 'next-auth/react';
 
 export default function HomePage() {
+  const { data: session, status } = useSession();
+  const role = (session?.user as any)?.role as ('admin'|'member'|undefined);
   const { loadProject } = useLabelStore();
 
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
@@ -95,6 +99,10 @@ export default function HomePage() {
   };
 
   const handleCreateProject = async () => {
+    if (role !== 'admin') {
+      alert('Hanya admin yang boleh membuat project');
+      return;
+    }
     if (!newProjectName.trim()) return;
 
     console.log('Creating new project:', newProjectName.trim());
@@ -254,22 +262,30 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <Link
-                href="/templates"
-                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm"
-              >
+              <Link href="/templates" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm">
                 <Palette className="w-4 h-4" />
                 <span>Manage Templates</span>
               </Link>
+              {role === 'admin' && (
+                <Link href="/admin/users" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm">
+                  <span>User Management</span>
+                </Link>
+              )}
+              {session && (
+                <button onClick={()=>signOut()} className="text-sm text-red-600 hover:text-red-700">Logout</button>
+              )}
 
-              <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
-              <DialogTrigger asChild>
-                <Button className="flex items-center space-x-2">
-                  <Plus className="w-4 h-4" />
-                  <span>New Project</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              {role === 'admin' && (
+                <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+                {role === 'admin' && (
+                  <DialogTrigger asChild>
+                    <Button className="flex items-center space-x-2">
+                      <Plus className="w-4 h-4" />
+                      <span>New Project</span>
+                    </Button>
+                  </DialogTrigger>
+                )}
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>
                   <DialogDescription>
@@ -304,16 +320,19 @@ export default function HomePage() {
                     >
                       Cancel
                     </Button>
-                    <Button 
-                      onClick={handleCreateProject} 
-                      disabled={!newProjectName.trim()}
-                    >
-                      Create Project
-                    </Button>
+                    {role === 'admin' && (
+                      <Button 
+                        onClick={handleCreateProject} 
+                        disabled={!newProjectName.trim()}
+                      >
+                        Create Project
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </DialogContent>
-              </Dialog>
+                </DialogContent>
+                </Dialog>
+              )}
             </div>
           </div>
         </div>

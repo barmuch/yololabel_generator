@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from 'sonner'
 import './globals.css'
+// SessionProvider must be used in a Client Component wrapper
+import Providers from './providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,16 +20,14 @@ export const viewport: Viewport = {
   themeColor: '#000000',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={inter.className}>
-        {children}
-        <Toaster 
+        <Providers>
+          {children}
+        </Providers>
+        <Toaster
           position="top-right"
           richColors
           closeButton

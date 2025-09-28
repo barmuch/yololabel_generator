@@ -114,3 +114,17 @@ export interface AnnotationDocument {
   updatedAt: number;
   createdBy?: string; // User identifier for collaboration
 }
+
+// User accounts for authentication
+export interface UserDocument {
+  _id?: ObjectId;
+  id: string; // custom user id
+  username: string;
+  name?: string;
+  role: 'admin' | 'member';
+  passwordHash: string; // bcrypt hash
+  createdAt: number;
+  updatedAt: number;
+  imageCount?: number;
+  annotationCount?: number;
+}

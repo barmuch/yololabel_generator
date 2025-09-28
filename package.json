@@ -19,6 +19,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.0",
     "cloudinary": "^1.41.3",
     "clsx": "^2.0.0",
@@ -31,6 +32,7 @@
     "lucide-react": "^0.263.1",
     "mongodb": "^6.3.0",
     "next": "^14.2.32",
+    "next-auth": "^4.24.11",
     "pdf2pic": "^3.2.0",
     "pdfjs-dist": "^5.4.149",
     "react": "^18",
@@ -47,6 +49,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/file-saver": "^2.0.7",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.0.1",

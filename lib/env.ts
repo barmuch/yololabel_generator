@@ -1,46 +1,60 @@
 import { z } from 'zod';
+import crypto from 'crypto';
 
-// Environment validation schema
+// Environment validation schema (AUTH_SECRET & BOOTSTRAP_SECRET optional for local dev)
 const envSchema = z.object({
-  // Cloudinary Configuration
-  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'Cloudinary cloud name is required'),
-  CLOUDINARY_API_KEY: z.string().min(1, 'Cloudinary API key is required'),
-  CLOUDINARY_API_SECRET: z.string().min(1, 'Cloudinary API secret is required'),
-  CLOUDINARY_URL: z.string().url('Invalid Cloudinary URL').optional(),
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: z.string().min(1, 'Public Cloudinary cloud name is required'),
-  
-  // Optional Cloudinary unsigned preset for development
+  CLOUDINARY_CLOUD_NAME: z.string().min(1),
+  CLOUDINARY_API_KEY: z.string().min(1),
+  CLOUDINARY_API_SECRET: z.string().min(1),
+  CLOUDINARY_URL: z.string().url().optional(),
+  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_UNSIGNED_PRESET: z.string().optional(),
-  
-  // MongoDB Configuration
-  MONGODB_URI: z.string().url('Invalid MongoDB URI'),
-  
-  // Development flags
+  MONGODB_URI: z.string().url(),
+  AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters').optional(),
+  BOOTSTRAP_SECRET: z.string().optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NEXTAUTH_URL: z.string().optional(),
 });
 
-// Validate environment variables
-export const env = envSchema.parse(process.env);
-
-// Type-safe environment variables
 export type Env = z.infer<typeof envSchema>;
 
-// Server-only validation (throws if invalid)
-export function validateServerEnv() {
-  try {
-    return envSchema.parse(process.env);
-  } catch (error) {
-    console.error('❌ Invalid environment configuration:');
-    if (error instanceof z.ZodError) {
-      error.errors.forEach((err) => {
-        console.error(`  - ${err.path.join('.')}: ${err.message}`);
-      });
+let cachedEnv: Env | null = null;
+
+export function getEnv(): Env {
+  if (cachedEnv) return cachedEnv;
+  const parsed = envSchema.safeParse(process.env);
+  if (!parsed.success) {
+    // Attempt to autofix minimal dev defaults
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      if (!process.env.AUTH_SECRET) {
+        process.env.AUTH_SECRET = crypto.randomBytes(32).toString('hex');
+        console.warn('⚠️ Generated temporary AUTH_SECRET for development. Set a persistent one in .env.local');
+      }
+      if (!process.env.BOOTSTRAP_SECRET) {
+        process.env.BOOTSTRAP_SECRET = 'bootstrap-once-secret';
+        console.warn('⚠️ Using default BOOTSTRAP_SECRET. Override in .env.local');
+      }
+      if (!process.env.NEXTAUTH_URL) {
+        process.env.NEXTAUTH_URL = 'http://localhost:3000';
+      }
+      const retry = envSchema.safeParse(process.env);
+      if (retry.success) {
+        cachedEnv = retry.data;
+        return cachedEnv;
+      }
     }
-    process.exit(1);
+    console.error('❌ Invalid environment configuration:');
+    parsed.error.errors.forEach(err => console.error(`  - ${err.path.join('.')}: ${err.message}`));
+    throw parsed.error;
   }
+  cachedEnv = parsed.data;
+  return cachedEnv;
 }
 
-// Client-safe environment (only NEXT_PUBLIC_ vars)
+// Backwards compatibility for old validateServerEnv usage
+export function validateServerEnv(): Env { return getEnv(); }
+
 export const clientEnv = {
   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
 } as const;

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useLabelStore } from '@/lib/store';
@@ -28,6 +29,8 @@ const CanvasStage = dynamic(
 );
 
 export default function LabelerPage() {
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role as ('admin'|'member'|undefined);
   const {
     currentProject,
     currentImageId,
@@ -488,14 +491,16 @@ export default function LabelerPage() {
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
             
-            <ExportDialog 
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-1" />
-                  Export
-                </Button>
-              } 
-            />
+            {role === 'admin' && (
+              <ExportDialog 
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export
+                  </Button>
+                } 
+              />
+            )}
           </div>
         </div>
       </header>

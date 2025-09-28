@@ -121,3 +121,17 @@ export type YoloAnnotation = {
   width: number;    // normalized 0-1
   height: number;   // normalized 0-1
 };
+
+// Authentication / User management
+export type UserRole = 'admin' | 'member';
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  name?: string;
+  role: UserRole;
+  createdAt: number;
+  updatedAt: number;
+  imageCount?: number; // optional aggregation
+  annotationCount?: number; // optional aggregation
+}

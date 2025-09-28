@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
-import { validateServerEnv } from '@/lib/env';
+import { getEnv } from '@/lib/env';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ImageDocument } from '@/lib/schemas';
 
@@ -8,7 +8,7 @@ import { ImageDocument } from '@/lib/schemas';
 export const runtime = 'nodejs';
 
 // Validate environment on startup
-const env = validateServerEnv();
+const env = getEnv();
 
 // Configure Cloudinary
 cloudinary.config({
