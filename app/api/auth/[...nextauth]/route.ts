@@ -15,7 +15,7 @@ const credentialsSchema = z.object({
   password: z.string().min(6)
 });
 
-export const authOptions = {
+const authOptions = {
   session: { strategy: 'jwt' as const },
   secret: process.env.AUTH_SECRET || 'dev-insecure-temp-secret-change-me-change-me-1234567890',
   pages: {
