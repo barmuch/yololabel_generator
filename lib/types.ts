@@ -24,6 +24,18 @@ export type ImageItem = {
   pdfPageNumber?: number; // Page number if from PDF
   originalPdfName?: string; // Original PDF filename
   pdfArrayBuffer?: ArrayBuffer; // Store PDF data for client-side rendering
+  // Optional slice metadata when image was produced by tiling a larger source
+  slice?: {
+    parent: string;          // original (unsliced) filename
+    suffix: string;          // e.g. _tile_001
+    index?: number;          // zero-based index
+    x?: number;              // left offset in original image
+    y?: number;              // top offset
+    w?: number;              // tile width
+    h?: number;              // tile height
+    originalWidth?: number;  // full original width
+    originalHeight?: number; // full original height
+  };
 };
 
 export type BBox = {

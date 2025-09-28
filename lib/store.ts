@@ -208,101 +208,99 @@ export const useLabelStore = create<LabelStore>()(
     addImages: async (files: File[]) => {
       console.log('addImages called with files:', files.map(f => f.name));
       const currentProject = get().currentProject;
-      
       if (!currentProject) {
         console.error('No project loaded');
         alert('Please load a project first');
         return;
       }
-      
       set((state) => { state.isLoading = true; });
-
       try {
+        const { sliceImageToTiles } = await import('./image-tiler');
         const newImages: ImageItem[] = [];
         let successCount = 0;
         let errorCount = 0;
-
-        for (const file of files) {
-          console.log('Processing file:', file.name, 'type:', file.type);
-          
-          // Validate file type
-          if (!file.type.startsWith('image/')) {
-            console.warn(`Skipping non-image file: ${file.name}`);
+        for (const originalFile of files) {
+          if (!originalFile.type.startsWith('image/')) {
+            console.warn(`Skipping non-image file: ${originalFile.name}`);
             continue;
           }
-
           try {
-            console.log(`📤 Uploading ${file.name} via complete upload flow...`);
-            
-            // Create FormData for upload
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('projectId', currentProject.id);
-
-            // Upload via complete upload flow (Cloudinary + MongoDB)
-            const response = await fetch('/api/upload-complete', {
-              method: 'POST',
-              body: formData,
-            });
-
-            if (!response.ok) {
-              throw new Error(`Upload failed: ${response.statusText}`);
+            // Attempt tiling
+            let filesToUpload: { file: File; suffix?: string }[] = [];
+            try {
+              const tiles = await sliceImageToTiles(originalFile, { tileSize: 1280, format: 'image/jpeg', quality: 0.9 });
+              if (tiles && tiles.length) {
+                console.log(`Tiling applied to ${originalFile.name}: produced ${tiles.length} tiles.`);
+                filesToUpload = tiles.map(t => {
+                  const tileFile = new File([t.blob], originalFile.name.replace(/\.[^.]+$/, '') + t.nameSuffix + '.jpg', { type: 'image/jpeg' });
+                  return { file: tileFile, suffix: t.nameSuffix };
+                });
+              } else {
+                filesToUpload = [{ file: originalFile }];
+              }
+            } catch (tileErr) {
+              console.warn('Tiling failed or skipped, uploading original file:', originalFile.name, tileErr);
+              filesToUpload = [{ file: originalFile }];
             }
-
-            const result = await response.json();
-            
-            if (!result.success) {
-              throw new Error(result.error || 'Upload failed');
-            }
-
-            console.log(`✅ Complete upload success for ${file.name}:`, result);
-
-            const imageItem: ImageItem = {
-              id: result.imageMetadata.id,
-              name: file.name,
-              width: result.width,
-              height: result.height,
-              url: result.url,
-              cloudinary: {
-                public_id: result.public_id,
-                secure_url: result.url,
+            for (const { file, suffix } of filesToUpload) {
+              console.log(`📤 Uploading ${file.name} (slice:${suffix || 'original'}) via complete upload flow...`);
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('projectId', currentProject.id);
+              if (suffix) formData.append('sliceSuffix', suffix);
+              formData.append('sourceOriginalName', originalFile.name);
+              const response = await fetch('/api/upload-complete', { method: 'POST', body: formData });
+              if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
+              const result = await response.json();
+              if (!result.success) throw new Error(result.error || 'Upload failed');
+              const imageItem: ImageItem = {
+                id: result.imageMetadata.id,
+                name: file.name,
                 width: result.width,
                 height: result.height,
-                format: result.format,
-                bytes: result.bytes,
-              },
-              status: "new"
-            };
-
-            newImages.push(imageItem);
-            successCount++;
-            console.log('Created image item:', imageItem);
-
+                url: result.url,
+                cloudinary: {
+                  public_id: result.public_id,
+                  secure_url: result.url,
+                  width: result.width,
+                  height: result.height,
+                  format: result.format,
+                  bytes: result.bytes,
+                },
+                status: 'new',
+                slice: suffix && result.tileMeta ? {
+                  parent: originalFile.name,
+                  suffix,
+                  index: result.tileMeta.index,
+                  x: result.tileMeta.x,
+                  y: result.tileMeta.y,
+                  w: result.tileMeta.w,
+                  h: result.tileMeta.h,
+                  originalWidth: result.tileMeta.originalWidth,
+                  originalHeight: result.tileMeta.originalHeight,
+                } : (suffix ? { parent: originalFile.name, suffix } : undefined),
+              };
+              newImages.push(imageItem);
+              successCount++;
+            }
           } catch (error) {
-            console.error(`❌ Failed to upload ${file.name}:`, error);
+            console.error(`❌ Failed to process/upload ${originalFile.name}:`, error);
             errorCount++;
           }
         }
-
         console.log(`📊 Upload summary: ${successCount} successful, ${errorCount} failed`);
-        console.log('Adding', newImages.length, 'images to project');
-
         if (newImages.length > 0) {
           set((state) => {
             if (state.currentProject) {
               state.currentProject.images.push(...newImages);
               state.currentProject.updatedAt = Date.now();
               state.hasUnsavedChanges = true;
-              
-              // Set first image as current if none selected
               if (!state.currentImageId && newImages.length > 0) {
-                console.log('Setting first image as current:', newImages[0].id);
                 state.currentImageId = newImages[0].id;
               }
             }
           });
         }
-
         if (errorCount > 0) {
           alert(`Upload completed with ${errorCount} errors. Check console for details.`);
         }
