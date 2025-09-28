@@ -154,7 +154,7 @@ export function ClassPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b space-y-4">
+  <div className="flex-shrink-0 p-4 border-b space-y-4 brand-subtle-panel">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Classes</h3>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -358,7 +358,7 @@ export function ClassPanel() {
               <>
                 Showing {filteredClasses.length > 9 ? `9 of ${filteredClasses.length}` : filteredClasses.length} filtered classes
                 {classes.length !== filteredClasses.length && (
-                  <span className="text-blue-600 dark:text-blue-400"> (from {classes?.length || 0} total)</span>
+                  <span className="text-[hsl(var(--brand-green-base))] dark:text-[hsl(var(--brand-green-light))]"> (from {classes?.length || 0} total)</span>
                 )}
               </>
             ) : (

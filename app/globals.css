@@ -4,48 +4,58 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    /* Brand Palette (Green) */
+    --brand-green-dark: 174 100% 15%; /* #004d40 approximated in HSL */
+    --brand-green-base: 123 46% 34%;  /* #2e7d32 */
+    --brand-green-light: 123 38% 65%; /* #81c784 */
+    --brand-bg-white: 0 0% 100%;      /* #ffffff */
+    --brand-gray-border: 0 0% 88%;    /* #e0e0e0 */
+    --brand-text-main: 210 8% 13%;    /* #212121 */
+    --brand-text-secondary: 210 10% 38%; /* #616161 */
+
+    /* Semantic Mapping */
+    --background: var(--brand-bg-white);
+    --foreground: var(--brand-text-main);
+    --card: var(--brand-bg-white);
+    --card-foreground: var(--brand-text-main);
+    --popover: var(--brand-bg-white);
+    --popover-foreground: var(--brand-text-main);
+    --primary: var(--brand-green-base);
+    --primary-foreground: var(--brand-bg-white);
+    --secondary: var(--brand-green-light);
+    --secondary-foreground: var(--brand-text-main);
+    --muted: var(--brand-gray-border);
+    --muted-foreground: var(--brand-text-secondary);
+    --accent: var(--brand-green-light);
+    --accent-foreground: var(--brand-text-main);
+    --destructive: 0 72% 50%;
+    --destructive-foreground: var(--brand-bg-white);
+    --border: var(--brand-gray-border);
+    --input: var(--brand-gray-border);
+    --ring: var(--brand-green-base);
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    --background: 174 100% 8%;
+    --foreground: var(--brand-bg-white);
+    --card: 174 100% 10%;
+    --card-foreground: var(--brand-bg-white);
+    --popover: 174 100% 10%;
+    --popover-foreground: var(--brand-bg-white);
+    --primary: var(--brand-green-light);
+    --primary-foreground: 174 100% 10%;
+    --secondary: 174 40% 20%;
+    --secondary-foreground: var(--brand-bg-white);
+    --muted: 174 25% 18%;
+    --muted-foreground: var(--brand-green-light);
+    --accent: 174 30% 25%;
+    --accent-foreground: var(--brand-bg-white);
+    --destructive: 0 62% 40%;
+    --destructive-foreground: var(--brand-bg-white);
+    --border: 174 25% 25%;
+    --input: 174 25% 25%;
+    --ring: var(--brand-green-light);
   }
 }
 
@@ -56,10 +66,45 @@
   body {
     @apply bg-background text-foreground;
   }
+  :focus-visible {
+    outline: 2px solid hsl(var(--brand-green-light));
+    outline-offset: 2px;
+  }
 }
 
 /* Custom scrollbar styles */
 @layer utilities {
+  @keyframes shimmer { 0% { transform: translateX(-100%);} 100% { transform: translateX(100%);} }
+  /* Brand utilities */
+  .brand-header {
+    @apply text-white;
+    background: linear-gradient(90deg, hsl(var(--brand-green-dark)) 0%, hsl(var(--brand-green-base)) 60%);
+  }
+  .brand-subtle-panel {
+    background: hsl(var(--brand-green-light) / 0.12);
+  }
+  .brand-accent-border {
+    border-color: hsl(var(--brand-green-base));
+  }
+  .brand-badge {
+    background: hsl(var(--brand-green-base));
+    color: #fff;
+  }
+  .brand-badge-outline {
+    border: 1px solid hsl(var(--brand-green-base));
+    color: hsl(var(--brand-green-base));
+  }
+  .brand-focus-ring:focus-visible {
+    outline: 2px solid hsl(var(--brand-green-light));
+    outline-offset: 2px;
+  }
+  .brand-gradient-btn {
+    background: linear-gradient(135deg, hsl(var(--brand-green-base)) 0%, hsl(var(--brand-green-light)) 100%);
+    color: #fff;
+  }
+  .brand-gradient-btn:hover {
+    filter: brightness(1.05);
+  }
   .scrollbar-thin {
     scrollbar-width: thin;
   }

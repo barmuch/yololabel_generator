@@ -163,11 +163,11 @@ export default function TemplateManagementPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
+  <header className="border-b brand-header">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700">
+              <Link href="/" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))]">
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to Projects</span>
               </Link>

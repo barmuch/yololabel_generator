@@ -83,7 +83,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Class Configuration</h3>
-        <Link href="/templates" className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1">
+  <Link href="/templates" className="text-sm text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] flex items-center space-x-1">
           <Settings className="w-4 h-4" />
           <span>Manage Templates</span>
         </Link>
@@ -99,7 +99,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
             value="none"
             checked={selectedOption === 'none'}
             onChange={(e) => setSelectedOption(e.target.value as 'none' | 'template' | 'custom')}
-            className="text-blue-600"
+            className="text-[hsl(var(--brand-green-base))]"
           />
           <label htmlFor="none" className="flex-1 cursor-pointer">
             <div>
@@ -119,7 +119,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
               value="template"
               checked={selectedOption === 'template'}
               onChange={(e) => setSelectedOption(e.target.value as 'none' | 'template' | 'custom')}
-              className="text-blue-600"
+              className="text-[hsl(var(--brand-green-base))]"
             />
             <label htmlFor="template" className="flex-1 cursor-pointer">
               <div>
@@ -135,7 +135,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
                 <div className="text-sm text-muted-foreground">Loading templates...</div>
               ) : templates.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  No templates available. <Link href="/templates" className="text-blue-600 hover:text-blue-700">Create one first</Link>
+                  No templates available. <Link href="/templates" className="text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))]">Create one first</Link>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -210,7 +210,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
               value="custom"
               checked={selectedOption === 'custom'}
               onChange={(e) => setSelectedOption(e.target.value as 'none' | 'template' | 'custom')}
-              className="text-blue-600"
+              className="text-[hsl(var(--brand-green-base))]"
             />
             <label htmlFor="custom" className="flex-1 cursor-pointer">
               <div>

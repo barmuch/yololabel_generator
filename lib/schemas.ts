@@ -68,8 +68,12 @@ export interface ImageDocument {
   updatedAt: number;
   
   // Status
-  status: 'new' | 'labeled' | 'reviewed';
+  status: 'new' | 'labeled' | 'reviewed' | 'validated';
   annotationCount: number; // Cache for quick access
+  
+  // Validation (admin only)
+  validatedBy?: string; // User ID who validated
+  validatedAt?: number; // Validation timestamp
   
   // PDF-specific fields (optional)
   originalFormat?: string; // 'pdf' for PDF pages, undefined for regular images

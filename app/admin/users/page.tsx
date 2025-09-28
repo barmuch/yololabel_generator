@@ -155,7 +155,7 @@ export default function AdminUsersPage() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700">
+              <Link href="/" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))]">
                 <ArrowLeft className="w-4 h-4" />
                 <Home className="w-4 h-4" />
                 <span>Back to Home</span>

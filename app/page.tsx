@@ -253,33 +253,33 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
+      <header className="border-b brand-header">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold">YOLO Label Generator</h1>
-              <p className="text-muted-foreground">Professional YOLO dataset annotation tool</p>
+              <h1 className="text-2xl font-bold tracking-wide">Excellence AI</h1>
+              <p className="text-sm opacity-80">Professional YOLO dataset annotation tool</p>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <Link href="/templates" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm">
+            <div className="flex items-center space-x-4 text-sm">
+              <Link href="/templates" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] text-sm">
                 <Palette className="w-4 h-4" />
                 <span>Manage Templates</span>
               </Link>
               {role === 'admin' && (
-                <Link href="/admin/users" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm">
+                <Link href="/admin/users" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] text-sm">
                   <span>User Management</span>
                 </Link>
               )}
               {session && (
-                <button onClick={()=>signOut()} className="text-sm text-red-600 hover:text-red-700">Logout</button>
+                <button onClick={()=>signOut()} className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Logout</button>
               )}
 
               {role === 'admin' && (
                 <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
                 {role === 'admin' && (
                   <DialogTrigger asChild>
-                    <Button className="flex items-center space-x-2">
+                    <Button className="flex items-center space-x-2 brand-gradient-btn border-none">
                       <Plus className="w-4 h-4" />
                       <span>New Project</span>
                     </Button>

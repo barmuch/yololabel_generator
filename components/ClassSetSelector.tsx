@@ -142,7 +142,7 @@ export default function ClassSetSelector({ onClassSetSelect, initialClasses = []
             value="new"
             checked={selectedOption === 'new'}
             onChange={() => handleOptionChange('new')}
-            className="text-blue-600"
+            className="text-[hsl(var(--brand-green-base))]"
           />
           <span>Create new class list</span>
         </label>
@@ -154,7 +154,7 @@ export default function ClassSetSelector({ onClassSetSelect, initialClasses = []
             value="existing"
             checked={selectedOption === 'existing'}
             onChange={() => handleOptionChange('existing')}
-            className="text-blue-600"
+            className="text-[hsl(var(--brand-green-base))]"
           />
           <span>Use existing class list from another project</span>
         </label>

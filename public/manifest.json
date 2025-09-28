@@ -1,7 +1,7 @@
 {
-  "name": "YOLO Label Generator",
-  "short_name": "YOLO Labeler",
-  "description": "Professional YOLO dataset annotation tool",
+  "name": "Excellence AI",
+  "short_name": "ExAI Labeler",
+  "description": "Excellence AI – Professional YOLO dataset annotation tool",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

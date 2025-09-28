@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="28" fill="#004d40"/>
+  <circle cx="96" cy="70" r="46" fill="#81c784" />
+  <path d="M56 140c12-12 24-18 40-18s28 6 40 18" stroke="#81c784" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <text x="96" y="156" text-anchor="middle" font-family="Arial" font-size="36" font-weight="bold" fill="white">EX</text>
+</svg>

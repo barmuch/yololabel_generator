@@ -1,10 +1,7 @@
 {
-  "/templates/page": "app/templates/page.js",
-  "/api/projects/route": "app/api/projects/route.js",
   "/page": "app/page.js",
-  "/api/class-sets/route": "app/api/class-sets/route.js",
   "/labeler/page": "app/labeler/page.js",
-  "/api/class-sets/[id]/route": "app/api/class-sets/[id]/route.js",
-  "/api/images/route": "app/api/images/route.js",
-  "/api/annotations/route": "app/api/annotations/route.js"
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/api/projects/route": "app/api/projects/route.js",
+  "/login/page": "app/login/page.js"
 }

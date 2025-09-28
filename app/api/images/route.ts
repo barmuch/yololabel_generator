@@ -171,6 +171,9 @@ export async function GET(request: NextRequest) {
         format: image.format,
         bytes: image.bytes,
         annotations: Array.isArray(image.annotations) ? image.annotations : [],
+        status: image.status || 'new',
+        validatedBy: image.validatedBy,
+        validatedAt: image.validatedAt,
         createdAt: image.createdAt,
         updatedAt: image.updatedAt,
       }));
@@ -196,6 +199,9 @@ export async function GET(request: NextRequest) {
       format: image.format,
       bytes: image.bytes,
       annotations: Array.isArray(image.annotations) ? image.annotations : [],
+      status: image.status || 'new',
+      validatedBy: image.validatedBy,
+      validatedAt: image.validatedAt,
       createdAt: image.createdAt,
       updatedAt: image.updatedAt,
     }));

@@ -8,8 +8,8 @@ import Providers from './providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'YOLO Label Generator',
-  description: 'Professional YOLO dataset annotation tool',
+  title: 'Excellence AI',
+  description: 'Excellence AI – Professional YOLO dataset annotation tool',
   manifest: '/manifest.json',
 }
 

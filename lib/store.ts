@@ -38,6 +38,7 @@ interface LabelStore {
   addImagesFromData: (images: ImageItem[]) => void;
   removeImage: (imageId: string) => Promise<void>;
   setCurrentImage: (imageId: string | null) => void;
+  updateImageValidation: (imageId: string, validated: boolean, validatedBy?: string) => void;
   
   // Actions - Class management
   addClass: (name: string) => void;
@@ -442,6 +443,29 @@ export const useLabelStore = create<LabelStore>()(
       });
     },
 
+    updateImageValidation: (imageId: string, validated: boolean, validatedBy?: string) => {
+      set((state) => {
+        if (state.currentProject) {
+          const image = state.currentProject.images.find(img => img.id === imageId);
+          if (image) {
+            if (validated) {
+              image.status = 'validated';
+              image.validatedBy = validatedBy;
+              image.validatedAt = Date.now();
+            } else {
+              // If unvalidating, revert to previous status based on whether it has annotations
+              const hasAnnotations = state.currentProject.bboxes?.some(bbox => bbox.imageId === imageId);
+              image.status = hasAnnotations ? 'labeled' : 'new';
+              image.validatedBy = undefined;
+              image.validatedAt = undefined;
+            }
+            state.currentProject.updatedAt = Date.now();
+            state.hasUnsavedChanges = true;
+          }
+        }
+      });
+    },
+
     // Class management
     addClass: (name: string) => {
       set((state) => {
@@ -838,13 +862,18 @@ export const useLabelStore = create<LabelStore>()(
               annotations: si.annotations ? si.annotations.length : 0
             });
 
-            // Avoid duplicates by publicId or url
+            // Check for existing images and update validation status from server
             const existingImageIndex = state.currentProject.images.findIndex(img => 
               img.cloudinary?.public_id === si.publicId || img.url === si.url
             );
             
             if (existingImageIndex >= 0) {
-              console.log(`[fetchAndMergeServerImages] Image already exists:`, si.publicId);
+              console.log(`[fetchAndMergeServerImages] Image already exists, updating validation status:`, si.publicId);
+              // Update validation status from server
+              const existingImage = state.currentProject.images[existingImageIndex];
+              existingImage.status = si.status || existingImage.status;
+              existingImage.validatedBy = si.validatedBy;
+              existingImage.validatedAt = si.validatedAt;
               continue;
             }
 
@@ -862,7 +891,9 @@ export const useLabelStore = create<LabelStore>()(
                 format: si.format || '',
                 bytes: si.bytes || 0,
               },
-              status: 'new', // Status will be updated when annotations are loaded
+              status: si.status || 'new', // Use validation status from server
+              validatedBy: si.validatedBy,
+              validatedAt: si.validatedAt,
             };
 
             console.log(`[fetchAndMergeServerImages] Adding new image to project:`, imageItem);

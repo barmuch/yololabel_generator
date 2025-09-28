@@ -77,7 +77,7 @@ export function Toolbar() {
   };
 
   return (
-    <div className="border-b bg-background p-2 overflow-x-auto">
+  <div className="border-b bg-background p-2 overflow-x-auto brand-subtle-panel">
       <div className="flex items-center justify-between min-w-max">
         {/* Left section - Tools */}
         <div className="flex items-center space-x-1 flex-shrink-0">

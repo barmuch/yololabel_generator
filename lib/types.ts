@@ -18,7 +18,9 @@ export type ImageItem = {
     orientation?: string; // portrait, landscape, square
   };
   url: string; // Main URL to use (either blobUrl or cloudinary.secure_url)
-  status?: "new" | "labeled";
+  status?: "new" | "labeled" | "validated";
+  validatedBy?: string; // User ID who validated this image
+  validatedAt?: number; // Timestamp when validated
   originalFormat?: string; // Track if converted from PDF
   isPdfPage?: boolean; // Flag to indicate this is a PDF page
   pdfPageNumber?: number; // Page number if from PDF
