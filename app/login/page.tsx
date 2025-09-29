@@ -14,12 +14,27 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await signIn('credentials', { redirect: false, username, password });
-    setLoading(false);
-    if (res?.error) {
-      setError('Login gagal');
-    } else {
-      router.push('/');
+    
+    try {
+      const res = await signIn('credentials', { 
+        redirect: false, 
+        username, 
+        password,
+        callbackUrl: '/'
+      });
+      
+      setLoading(false);
+      
+      if (res?.error) {
+        setError('Login gagal');
+      } else if (res?.ok) {
+        // Force redirect using window.location for production reliability
+        window.location.href = '/';
+      }
+    } catch (error) {
+      setLoading(false);
+      setError('Terjadi kesalahan saat login');
+      console.error('Login error:', error);
     }
   };
 

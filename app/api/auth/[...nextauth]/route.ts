@@ -21,6 +21,17 @@ const authOptions = {
   pages: {
     signIn: '/login'
   },
+  callbacks: {
+    async redirect({ url, baseUrl }: any) {
+      // Always redirect to home after successful login
+      if (url.includes('/login')) {
+        return baseUrl + '/';
+      }
+      // Handle other redirects
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      if (new URL(url).origin === baseUrl) return url;
+      return baseUrl + '/';
+    },
   providers: [
     Credentials({
       name: 'Credentials',
@@ -47,7 +58,6 @@ const authOptions = {
       }
     })
   ],
-  callbacks: {
     async jwt({ token, user }: any) {
       if (user) {
         token.role = (user as any).role;
