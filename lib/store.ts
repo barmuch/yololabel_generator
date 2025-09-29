@@ -133,7 +133,9 @@ export const useLabelStore = create<LabelStore>()(
         ],
       };
       
-      console.log('Creating project:', project);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Creating project:', project);
+      }
       
       set((state) => {
         state.currentProject = project;
@@ -145,15 +147,21 @@ export const useLabelStore = create<LabelStore>()(
       setTimeout(async () => {
         try {
           await get().saveToIndexedDB();
-          console.log('New project auto-saved');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('New project auto-saved');
+          }
         } catch (error) {
-          console.error('Failed to auto-save new project:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to auto-save new project:', error);
+          }
         }
       }, 0);
     },
 
     loadProject: (project: Project) => {
-      console.log('Loading project into store:', project.name, 'with', project.images.length, 'images');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Loading project into store:', project.name, 'with', project.images.length, 'images');
+      }
       
       // Normalize images to ensure each has a usable `url` so thumbnails render.
       try {
@@ -162,13 +170,17 @@ export const useLabelStore = create<LabelStore>()(
           if (!img.url) {
             img.url = img.cloudinary?.secure_url ?? img.blobUrl ?? '';
             if (img.url) {
+            if (process.env.NODE_ENV === 'development') {
               console.log('Normalized image.url for', img.name, '->', img.url);
+            }
             }
           }
           return img;
         });
       } catch (e) {
-        console.warn('Error normalizing project images on load:', e);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Error normalizing project images on load:', e);
+        }
       }
 
       set((state) => {
@@ -176,12 +188,14 @@ export const useLabelStore = create<LabelStore>()(
         state.currentImageId = project.images.length > 0 ? project.images[0].id : null;
       });
       
-      console.log('Project loaded, currentImageId set to:', project.images.length > 0 ? project.images[0].id : null);
-      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Project loaded, currentImageId set to:', project.images.length > 0 ? project.images[0].id : null);
+      }
+
       // Fetch images from MongoDB after loading project
-      console.log('Fetching images from MongoDB for project:', project.id);
-      
-      // Clear any previous fetch tracking for this project to ensure fresh fetch
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Fetching images from MongoDB for project:', project.id);
+      }      // Clear any previous fetch tracking for this project to ensure fresh fetch
       fetchedProjectImages.delete(project.id);
       
       // Fetch images and annotations from server
@@ -222,7 +236,9 @@ export const useLabelStore = create<LabelStore>()(
         let errorCount = 0;
         for (const originalFile of files) {
           if (!originalFile.type.startsWith('image/')) {
-            console.warn(`Skipping non-image file: ${originalFile.name}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Skipping non-image file: ${originalFile.name}`);
+            }
             continue;
           }
           try {
@@ -231,7 +247,9 @@ export const useLabelStore = create<LabelStore>()(
             try {
               const tiles = await sliceImageToTiles(originalFile, { tileSize: 1280, format: 'image/jpeg', quality: 0.9 });
               if (tiles && tiles.length) {
-                console.log(`Tiling applied to ${originalFile.name}: produced ${tiles.length} tiles.`);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`Tiling applied to ${originalFile.name}: produced ${tiles.length} tiles.`);
+                }
                 filesToUpload = tiles.map(t => {
                   const tileFile = new File([t.blob], originalFile.name.replace(/\.[^.]+$/, '') + t.nameSuffix + '.jpg', { type: 'image/jpeg' });
                   return { file: tileFile, suffix: t.nameSuffix };
@@ -315,7 +333,9 @@ export const useLabelStore = create<LabelStore>()(
 
     // Add images from pre-processed data (e.g., converted PDF pages)
     addImagesFromData: (images: ImageItem[]) => {
-      console.log('addImagesFromData called with images:', images.map(img => img.name));
+      if (process.env.NODE_ENV === 'development') {
+        console.log('addImagesFromData called with images:', images.map(img => img.name));
+      }
       const currentProject = get().currentProject;
       
       if (!currentProject) {

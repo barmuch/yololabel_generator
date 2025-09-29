@@ -29,11 +29,17 @@ export function getEnv(): Env {
     if (isDev) {
       if (!process.env.AUTH_SECRET) {
         process.env.AUTH_SECRET = crypto.randomBytes(32).toString('hex');
-        console.warn('⚠️ Generated temporary AUTH_SECRET for development. Set a persistent one in .env.local');
+        // Only warn in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Generated temporary AUTH_SECRET for development. Set a persistent one in .env.local');
+        }
       }
       if (!process.env.BOOTSTRAP_SECRET) {
         process.env.BOOTSTRAP_SECRET = 'bootstrap-once-secret';
-        console.warn('⚠️ Using default BOOTSTRAP_SECRET. Override in .env.local');
+        // Only warn in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Using default BOOTSTRAP_SECRET. Override in .env.local');
+        }
       }
       if (!process.env.NEXTAUTH_URL) {
         process.env.NEXTAUTH_URL = 'http://localhost:3000';

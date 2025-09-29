@@ -17,7 +17,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
-    console.log('Deleting project from MongoDB:', id);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Deleting project from MongoDB:', id);
+    }
     
     const db = await getDatabase();
     
@@ -27,7 +29,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     // Also delete all related images from images collection
     const imagesResult = await db.collection('images').deleteMany({ projectId: id });
     
-    console.log(`Project deleted: ${projectResult.deletedCount} project(s), ${imagesResult.deletedCount} image(s)`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Project deleted: ${projectResult.deletedCount} project(s), ${imagesResult.deletedCount} image(s)`);
+    }
     
     if (projectResult.deletedCount === 0) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });

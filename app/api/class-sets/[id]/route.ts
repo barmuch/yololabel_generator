@@ -118,7 +118,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { db } = await connectToDatabase();
     
-    console.log(`🗑️ Attempting to delete class set: ${params.id}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🗑️ Attempting to delete class set: ${params.id}`);
+    }
     
     // First, get current class set info
     const classSet = await db
@@ -132,18 +134,24 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    console.log(`📊 Current stored project count: ${classSet.projectCount}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📊 Current stored project count: ${classSet.projectCount}`);
+    }
     
     // Check actual projects using this class set
     const projectsUsingClassSet = await db
       .collection<ProjectDocument>('projects')
       .countDocuments({ classSetId: params.id });
       
-    console.log(`🔍 Actual projects found in database: ${projectsUsingClassSet}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔍 Actual projects found in database: ${projectsUsingClassSet}`);
+    }
     
     // Update the project count in class set to match reality
     if (classSet.projectCount !== projectsUsingClassSet) {
-      console.log(`🔄 Updating project count from ${classSet.projectCount} to ${projectsUsingClassSet}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 Updating project count from ${classSet.projectCount} to ${projectsUsingClassSet}`);
+      }
       await db
         .collection<ClassSetDocument>('classSets')
         .updateOne(
@@ -158,7 +166,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         .find({ classSetId: params.id }, { projection: { id: 1, name: 1 } })
         .toArray();
         
-      console.log(`❌ Projects still using this class set:`, projects.map(p => `${p.name} (${p.id})`));
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`❌ Projects still using this class set:`, projects.map(p => `${p.name} (${p.id})`));
+      }
       
       return NextResponse.json(
         { 
@@ -171,7 +181,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    console.log(`✅ No projects using class set, proceeding with deletion`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ No projects using class set, proceeding with deletion`);
+    }
     
     const result = await db
       .collection<ClassSetDocument>('classSets')
@@ -184,7 +196,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    console.log(`🎉 Class set deleted successfully: ${classSet.name}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🎉 Class set deleted successfully: ${classSet.name}`);
+    }
 
     return NextResponse.json({
       success: true,

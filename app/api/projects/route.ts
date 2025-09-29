@@ -4,7 +4,9 @@ import { ProjectDocument, ClassSetDocument } from '@/lib/schemas';
 
 export async function GET() {
   try {
-    console.log('🔍 Fetching all projects from MongoDB...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Fetching all projects from MongoDB...');
+    }
     
     const db = await getDatabase();
     
@@ -41,7 +43,9 @@ export async function GET() {
       })
     );
     
-    console.log(`✅ Found ${projectsWithCounts.length} projects in MongoDB`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Found ${projectsWithCounts.length} projects in MongoDB`);
+    }
     
     return NextResponse.json({
       success: true,
@@ -61,7 +65,9 @@ export async function POST(request: NextRequest) {
   try {
     const projectData = await request.json();
     
-    console.log('💾 Creating/updating project in MongoDB:', projectData.name);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 Creating/updating project in MongoDB:', projectData.name);
+    }
     
     const db = await getDatabase();
     
@@ -96,7 +102,9 @@ export async function POST(request: NextRequest) {
       { upsert: true }
     );
     
-    console.log(`✅ Project saved: ${result.upsertedId ? 'created' : 'updated'}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Project saved: ${result.upsertedId ? 'created' : 'updated'}`);
+    }
     
     return NextResponse.json({
       success: true,

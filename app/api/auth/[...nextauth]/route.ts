@@ -56,7 +56,7 @@ const authOptions: NextAuthOptions = {
         try {
           const parsed = credentialsSchema.safeParse(credentials);
           if (!parsed.success) {
-            console.log('Credentials validation failed');
+            // Validation failed - don't log sensitive data
             return null;
           }
           
@@ -65,12 +65,12 @@ const authOptions: NextAuthOptions = {
           const user = await db.collection('users').findOne({ username });
           
           if (!user) {
-            console.log('User not found:', username);
+            // User not found - don't log username
             return null;
           }
           
           if (!user.passwordHash) {
-            console.log('No password hash for user:', username);
+            // No password hash - don't log username
             return null;
           }
           

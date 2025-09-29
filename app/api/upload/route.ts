@@ -60,7 +60,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large. Maximum size is 10MB.' }, { status: 413 });
     }
 
-    console.log('Processing upload:', file.name, 'size:', file.size, 'type:', file.type);
+    // Development only logging
+    if (env.NODE_ENV === 'development') {
+      console.log('Processing upload:', file.name, 'size:', file.size, 'type:', file.type);
+    }
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
@@ -82,21 +85,31 @@ export async function POST(request: NextRequest) {
     let cloudinaryResult;
     try {
       cloudinaryResult = await cloudinary.uploader.upload(dataUri, uploadOptions);
-      console.log('Upload success:', cloudinaryResult.public_id);
+      if (env.NODE_ENV === 'development') {
+        console.log('Upload success:', cloudinaryResult.public_id);
+      }
     } catch (signedErr: any) {
-      console.error('Signed upload failed:', signedErr);
+      if (env.NODE_ENV === 'development') {
+        console.error('Signed upload failed:', signedErr);
+      }
 
       // Fallback to unsigned preset if configured (development only)
       if (env.NODE_ENV === 'development' && env.CLOUDINARY_UNSIGNED_PRESET) {
-        console.log('Attempting unsigned upload fallback');
+        if (env.NODE_ENV === 'development') {
+          console.log('Attempting unsigned upload fallback');
+        }
         try {
           cloudinaryResult = await cloudinary.uploader.upload(dataUri, {
             ...uploadOptions,
             upload_preset: env.CLOUDINARY_UNSIGNED_PRESET,
           });
-          console.log('Unsigned upload success:', cloudinaryResult.public_id);
+          if (env.NODE_ENV === 'development') {
+            console.log('Unsigned upload success:', cloudinaryResult.public_id);
+          }
         } catch (unsignedErr) {
-          console.error('Unsigned upload failed:', unsignedErr);
+          if (env.NODE_ENV === 'development') {
+            console.error('Unsigned upload failed:', unsignedErr);
+          }
           throw unsignedErr;
         }
       } else {

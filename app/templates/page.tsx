@@ -50,7 +50,10 @@ export default function TemplateManagementPage() {
         setTemplates(data.classSets);
       }
     } catch (error) {
-      console.error('Error fetching templates:', error);
+      // Only log detailed errors in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error fetching templates:', error);
+      }
     } finally {
       setLoading(false);
     }

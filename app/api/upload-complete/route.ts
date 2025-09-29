@@ -19,7 +19,9 @@ cloudinary.config({
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🚀 Starting complete upload flow...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🚀 Starting complete upload flow...');
+    }
     
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -47,7 +49,9 @@ export async function POST(request: NextRequest) {
       }, { status: 413 });
     }
 
-    console.log(`📁 Processing upload: ${file.name} (${file.size} bytes) for project: ${projectId}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📁 Processing upload: ${file.name} (${file.size} bytes) for project: ${projectId}`);
+    }
 
     // Step 1: Upload to Cloudinary
     const bytes = await file.arrayBuffer();
@@ -62,9 +66,13 @@ export async function POST(request: NextRequest) {
       moderation: 'manual',
     };
 
-    console.log('☁️ Uploading to Cloudinary...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('☁️ Uploading to Cloudinary...');
+    }
     const cloudinaryResult = await cloudinary.uploader.upload(dataUri, uploadOptions);
-    console.log(`✅ Cloudinary upload success: ${cloudinaryResult.public_id}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Cloudinary upload success: ${cloudinaryResult.public_id}`);
+    }
 
     // Step 2: Save metadata to MongoDB
     const { db } = await connectToDatabase();
@@ -96,7 +104,9 @@ export async function POST(request: NextRequest) {
       annotationCount: 0
     };
 
-    console.log('💾 Saving image metadata to MongoDB...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 Saving image metadata to MongoDB...');
+    }
     const result = await db.collection('images').insertOne(imageDoc);
 
     // Step 3: Update project statistics
@@ -108,7 +118,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    console.log(`✅ Complete upload flow successful: ${result.insertedId}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Complete upload flow successful: ${result.insertedId}`);
+    }
 
     // Return data in format expected by frontend
     return NextResponse.json({
