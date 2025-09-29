@@ -118,22 +118,61 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { db } = await connectToDatabase();
     
-    // Check if any projects are using this class set
+    console.log(`🗑️ Attempting to delete class set: ${params.id}`);
+    
+    // First, get current class set info
+    const classSet = await db
+      .collection<ClassSetDocument>('classSets')
+      .findOne({ id: params.id });
+      
+    if (!classSet) {
+      return NextResponse.json(
+        { success: false, error: 'Class set not found' },
+        { status: 404 }
+      );
+    }
+    
+    console.log(`📊 Current stored project count: ${classSet.projectCount}`);
+    
+    // Check actual projects using this class set
     const projectsUsingClassSet = await db
       .collection<ProjectDocument>('projects')
       .countDocuments({ classSetId: params.id });
+      
+    console.log(`🔍 Actual projects found in database: ${projectsUsingClassSet}`);
+    
+    // Update the project count in class set to match reality
+    if (classSet.projectCount !== projectsUsingClassSet) {
+      console.log(`🔄 Updating project count from ${classSet.projectCount} to ${projectsUsingClassSet}`);
+      await db
+        .collection<ClassSetDocument>('classSets')
+        .updateOne(
+          { id: params.id },
+          { $set: { projectCount: projectsUsingClassSet } }
+        );
+    }
 
     if (projectsUsingClassSet > 0) {
+      const projects = await db
+        .collection<ProjectDocument>('projects')
+        .find({ classSetId: params.id }, { projection: { id: 1, name: 1 } })
+        .toArray();
+        
+      console.log(`❌ Projects still using this class set:`, projects.map(p => `${p.name} (${p.id})`));
+      
       return NextResponse.json(
         { 
           success: false, 
-          error: `Cannot delete class set. ${projectsUsingClassSet} project(s) are using it.`,
-          projectCount: projectsUsingClassSet
+          error: `Cannot delete class set. ${projectsUsingClassSet} project(s) are still using it.`,
+          projectCount: projectsUsingClassSet,
+          projects: projects.map(p => ({ id: p.id, name: p.name }))
         },
         { status: 400 }
       );
     }
 
+    console.log(`✅ No projects using class set, proceeding with deletion`);
+    
     const result = await db
       .collection<ClassSetDocument>('classSets')
       .deleteOne({ id: params.id });
@@ -144,6 +183,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
+    
+    console.log(`🎉 Class set deleted successfully: ${classSet.name}`);
 
     return NextResponse.json({
       success: true,
