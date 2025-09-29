@@ -1,20 +1,24 @@
-import NextAuth from 'next-auth';
+import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { getDatabase } from '@/lib/mongodb';
+
+// Set environment variable for Vercel deployment
+if (process.env.VERCEL_URL && !process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+}
 
 const credentialsSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
 });
 
-const authOptions = {
+const authOptions: NextAuthOptions = {
   session: { 
     strategy: 'jwt' as const 
   },
   secret: process.env.AUTH_SECRET,
-  trustHost: true,
   pages: {
     signIn: '/login'
   },
@@ -94,4 +98,3 @@ const authOptions = {
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
-export { authOptions };
