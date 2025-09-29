@@ -1,78 +1,97 @@
 import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import { getEnv } from '@/lib/env';
-import { getDatabase } from '@/lib/mongodb';
-import { z } from 'zod';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-
-const env = getEnv();
-if (!process.env.AUTH_SECRET) {
-  console.warn('AUTH_SECRET is not set. Set it in environment for secure sessions.');
-}
+import { z } from 'zod';
+import { getDatabase } from '@/lib/mongodb';
 
 const credentialsSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(6)
+  username: z.string().min(1),
+  password: z.string().min(1),
 });
 
 const authOptions = {
-  session: { strategy: 'jwt' as const },
-  secret: process.env.AUTH_SECRET || 'dev-insecure-temp-secret-change-me-change-me-1234567890',
+  session: { 
+    strategy: 'jwt' as const 
+  },
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
   pages: {
     signIn: '/login'
   },
   callbacks: {
-    async redirect({ url, baseUrl }: any) {
-      // Always redirect to home after successful login
-      if (url.includes('/login')) {
-        return baseUrl + '/';
-      }
-      // Handle other redirects
-      if (url.startsWith('/')) return `${baseUrl}${url}`;
-      if (new URL(url).origin === baseUrl) return url;
-      return baseUrl + '/';
-    },
-  providers: [
-    Credentials({
-      name: 'Credentials',
-      credentials: {
-        username: { label: 'Username', type: 'text' },
-        password: { label: 'Password', type: 'password' }
-      },
-      async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-        const { username, password } = parsed.data;
-        const db = await getDatabase();
-        const user = await db.collection('users').findOne({ username });
-        if (!user) return null;
-        if (!user.passwordHash) return null;
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
-        return {
-          id: user.id,
-          username: user.username,
-            name: user.name || user.username,
-            role: user.role || 'member'
-        } as any;
-      }
-    })
-  ],
     async jwt({ token, user }: any) {
       if (user) {
-        token.role = (user as any).role;
-        token.username = (user as any).username;
+        token.role = user.role;
+        token.username = user.username;
       }
       return token;
     },
     async session({ session, token }: any) {
       if (session.user) {
-        (session.user as any).role = token.role;
+        session.user.role = token.role;
+        session.user.username = token.username;
       }
       return session;
+    },
+    async redirect({ url, baseUrl }: any) {
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
     }
-  }
+  },
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' }
+      },
+      async authorize(credentials) {
+        if (!credentials) return null;
+        
+        try {
+          const parsed = credentialsSchema.safeParse(credentials);
+          if (!parsed.success) {
+            console.log('Credentials validation failed');
+            return null;
+          }
+          
+          const { username, password } = parsed.data;
+          const db = await getDatabase();
+          const user = await db.collection('users').findOne({ username });
+          
+          if (!user) {
+            console.log('User not found:', username);
+            return null;
+          }
+          
+          if (!user.passwordHash) {
+            console.log('No password hash for user:', username);
+            return null;
+          }
+          
+          const valid = await bcrypt.compare(password, user.passwordHash);
+          if (!valid) {
+            console.log('Invalid password for user:', username);
+            return null;
+          }
+          
+          return {
+            id: user.id || user._id.toString(),
+            username: user.username,
+            name: user.name || user.username,
+            role: user.role || 'member'
+          };
+        } catch (error) {
+          console.error('Authentication error:', error);
+          return null;
+        }
+      }
+    })
+  ]
 };
 
-const handler = NextAuth(authOptions as any);
+const handler = NextAuth(authOptions);
+
 export { handler as GET, handler as POST };
+export { authOptions };
