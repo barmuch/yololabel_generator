@@ -1,19 +1,18 @@
 {
   "app\\labeler\\page.tsx -> @/components/CanvasStage": {
-    "id": 4939,
+    "id": "app\\labeler\\page.tsx -> @/components/CanvasStage",
     "files": [
-      "static/chunks/514.6510b132e25679a5.js",
-      "static/chunks/939.8e491afd469dc129.js"
+      "static/chunks/_app-pages-browser_components_CanvasStage_tsx.js"
     ]
   },
   "app\\labeler\\page.tsx -> @/lib/store": {
-    "id": 2097,
+    "id": "app\\labeler\\page.tsx -> @/lib/store",
     "files": []
   },
   "lib\\store.ts -> ./image-tiler": {
-    "id": 9225,
+    "id": "lib\\store.ts -> ./image-tiler",
     "files": [
-      "static/chunks/225.f56cc21106ee937d.js"
+      "static/chunks/_app-pages-browser_lib_image-tiler_ts.js"
     ]
   }
 }

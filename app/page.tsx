@@ -253,33 +253,39 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b brand-header">
+      <header className="border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-wide">Excellence AI</h1>
-              <p className="text-sm opacity-80">Professional YOLO dataset annotation tool</p>
+              <h1 className="text-2xl font-bold tracking-wide text-[hsl(var(--brand-green-base))]">Excellence AI</h1>
+              <p className="text-sm text-muted-foreground">Professional YOLO dataset annotation tool</p>
             </div>
 
-            <div className="flex items-center space-x-4 text-sm">
-              <Link href="/templates" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] text-sm">
-                <Palette className="w-4 h-4" />
-                <span>Manage Templates</span>
+            <div className="flex items-center gap-2 text-sm">
+              <Link href="/templates">
+                <Button variant="subtle" size="sm" className="border border-[hsl(var(--surface-border-strong))] gap-1">
+                  <Palette className="w-4 h-4" />
+                  <span>Templates</span>
+                </Button>
               </Link>
               {role === 'admin' && (
-                <Link href="/admin/users" className="flex items-center space-x-2 text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] text-sm">
-                  <span>User Management</span>
+                <Link href="/admin/users">
+                  <Button variant="subtle" size="sm" className="border border-[hsl(var(--surface-border-strong))]">
+                    Users
+                  </Button>
                 </Link>
               )}
               {session && (
-                <button onClick={()=>signOut()} className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Logout</button>
+                <Button variant="outline" size="sm" onClick={()=>signOut()} className="border border-[hsl(var(--surface-border-strong))]">
+                  Logout
+                </Button>
               )}
 
               {role === 'admin' && (
                 <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
                 {role === 'admin' && (
                   <DialogTrigger asChild>
-                    <Button className="flex items-center space-x-2 brand-gradient-btn border-none">
+                    <Button className="flex items-center space-x-2 brand-gradient-btn border-none shadow-sm">
                       <Plus className="w-4 h-4" />
                       <span>New Project</span>
                     </Button>
@@ -337,16 +343,24 @@ export default function HomePage() {
           </div>
         </div>
       </header>      {/* Main Content */}
-      <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="container mx-auto px-6 py-8 relative min-h-[calc(100vh-120px)]">
+        {/* Background Vector */}
+        <div className="absolute top-8 left-0 w-1/2 h-3/4 pointer-events-none opacity-20 z-0">
+          <img 
+            src="/Vector.png" 
+            alt="" 
+            className="w-full h-full object-contain object-left-top"
+          />
+        </div>
+        <div className="max-w-4xl mx-auto relative z-10">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold">Projects</h2>
+            <h2 className="text-xl font-semibold text-[hsl(var(--brand-green-base))] tracking-wide">Projects</h2>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={forceLoadFromServer}>
+              <Button variant="subtle" size="sm" onClick={forceLoadFromServer} className="border border-[hsl(var(--surface-border-strong))]">
                 <Calendar className="w-4 h-4 mr-2" />
-                Load from Server
+                Load
               </Button>
-              <Button variant="ghost" size="sm" onClick={loadAllProjects}>
+              <Button variant="soft" size="sm" onClick={loadAllProjects}>
                 <Clock className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
@@ -354,14 +368,14 @@ export default function HomePage() {
           </div>
 
           {isLoading ? (
-            <div className="border rounded-lg p-8 text-center">
+            <div className="border border-white/20 rounded-lg p-8 text-center bg-white/10 backdrop-blur-md shadow-lg">
               <div className="text-muted-foreground">
                 <Clock className="w-12 h-12 mx-auto mb-4 opacity-50 animate-spin" />
                 <p>Loading projects...</p>
               </div>
             </div>
           ) : allProjects.length === 0 ? (
-            <div className="border rounded-lg p-12 text-center">
+            <div className="border border-white/20 rounded-lg p-12 text-center bg-white/10 backdrop-blur-md shadow-lg">
               <div className="text-muted-foreground">
                 <FolderOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-medium mb-2">No projects yet</h3>
@@ -377,7 +391,7 @@ export default function HomePage() {
               {allProjects.map((project) => (
                 <div
                   key={project.id}
-                  className="border rounded-lg p-4 hover:bg-muted/50 transition-colors group"
+                  className="border border-white/20 rounded-lg p-4 bg-white/10 backdrop-blur-md hover:bg-white/20 shadow-lg hover:shadow-xl transition-all duration-300 group"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 cursor-pointer" onClick={() => handleLoadProject(project)}>
@@ -412,21 +426,21 @@ export default function HomePage() {
                     <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="subtle"
                         onClick={() => handleLoadProject(project)}
-                        className="h-8 w-8 p-0"
+                        className="h-8 w-8 p-0 border border-[hsl(var(--surface-border-strong))]"
                         title="Open Project"
                       >
                         <FolderOpen className="w-4 h-4" />
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="subtle"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteProject(project.id, project.name);
                         }}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive border border-[hsl(var(--surface-border-strong))]"
                         title="Delete Project"
                       >
                         <Trash2 className="w-4 h-4" />

@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   title: 'Excellence AI',
   description: 'Excellence AI – Professional YOLO dataset annotation tool',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/Vector.png',
+    shortcut: '/Vector.png',
+    apple: '/Vector.png',
+  },
 }
 
 export const viewport: Viewport = {

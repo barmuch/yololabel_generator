@@ -24,10 +24,15 @@
     --primary-foreground: var(--brand-bg-white);
     --secondary: var(--brand-green-light);
     --secondary-foreground: var(--brand-text-main);
-    --muted: var(--brand-gray-border);
-    --muted-foreground: var(--brand-text-secondary);
-    --accent: var(--brand-green-light);
-    --accent-foreground: var(--brand-text-main);
+  --muted: var(--brand-gray-border);
+  --muted-foreground: var(--brand-text-secondary);
+  --accent: var(--brand-green-light);
+  --accent-foreground: var(--brand-text-main);
+  /* Extra surface layers for better separation */
+  --surface-1: 0 0% 100%;
+  --surface-2: 0 0% 98%;
+  --surface-3: 0 0% 96%;
+  --surface-border-strong: 0 0% 82%;
     --destructive: 0 72% 50%;
     --destructive-foreground: var(--brand-bg-white);
     --border: var(--brand-gray-border);
@@ -64,7 +69,8 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "liga" on, "calt" on;
   }
   :focus-visible {
     outline: 2px solid hsl(var(--brand-green-light));
@@ -81,7 +87,44 @@
     background: linear-gradient(90deg, hsl(var(--brand-green-dark)) 0%, hsl(var(--brand-green-base)) 60%);
   }
   .brand-subtle-panel {
-    background: hsl(var(--brand-green-light) / 0.12);
+    background: linear-gradient(180deg, hsl(var(--surface-2)) 0%, hsl(var(--surface-3)) 100%);
+  }
+  .panel-elevated {
+    background: hsl(var(--surface-1));
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.06), 0 2px 8px -2px hsl(0 0% 0% / 0.05);
+    border: 1px solid hsl(var(--surface-border-strong));
+  }
+  .panel-soft {
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border));
+  }
+  .toolbar-blur {
+    backdrop-filter: blur(6px);
+    background: linear-gradient(90deg, hsl(var(--surface-1) / 0.85), hsl(var(--surface-2) / 0.85));
+    border-bottom: 1px solid hsl(var(--surface-border-strong));
+  }
+  .tab-active-underline {
+    position: relative;
+  }
+  .tab-active-underline::after {
+    content: "";
+    position: absolute;
+    left: 16%;
+    right: 16%;
+    bottom: 2px;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, hsl(var(--brand-green-base)), hsl(var(--brand-green-light)));
+  }
+  .focus-ring-soft:focus-visible {
+    outline: 2px solid hsl(var(--brand-green-light) / 0.8);
+    outline-offset: 2px;
+  }
+  .btn-soft-hover:hover {
+    filter: brightness(1.04);
+  }
+  .divider-gradient {
+    height:1px; width:100%; background:linear-gradient(90deg, transparent, hsl(var(--brand-green-base)/0.4), transparent);
   }
   .brand-accent-border {
     border-color: hsl(var(--brand-green-base));

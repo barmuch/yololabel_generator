@@ -11,12 +11,7 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
-  Download,
-  Grid,
-  Eye,
-  EyeOff,
-  Lock,
-  Unlock
+  Eraser
 } from 'lucide-react';
 import { CanvasMode } from '@/lib/types';
 
@@ -31,6 +26,8 @@ export function Toolbar() {
     currentProject,
     getBBoxesForImage,
     currentImageId,
+    removeBBox,
+    setSelectedBBox,
   } = useLabelStore();
 
   const currentImage = currentProject?.images.find(img => img.id === currentImageId);
@@ -58,6 +55,8 @@ export function Toolbar() {
         return <Square className="w-4 h-4" />;
       case 'pan':
         return <Hand className="w-4 h-4" />;
+      case 'erase':
+        return <Eraser className="w-4 h-4" />;
       default:
         return <MousePointer2 className="w-4 h-4" />;
     }
@@ -71,6 +70,8 @@ export function Toolbar() {
         return 'Draw';
       case 'pan':
         return 'Pan';
+      case 'erase':
+        return 'Erase';
       default:
         return 'Select';
     }
@@ -82,7 +83,7 @@ export function Toolbar() {
         {/* Left section - Tools */}
         <div className="flex items-center space-x-1 flex-shrink-0">
           {/* Mode buttons */}
-          {(['select', 'draw', 'pan'] as CanvasMode[]).map((mode) => (
+          {(['select', 'draw', 'pan', 'erase'] as CanvasMode[]).map((mode) => (
             <Button
               key={mode}
               size="sm"
@@ -171,6 +172,24 @@ export function Toolbar() {
 
         {/* Right section - Status */}
         <div className="flex items-center space-x-1 flex-shrink-0">
+          {/* Delete selected bbox */}
+          {toolState.selectedBBoxId && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                if (toolState.selectedBBoxId) {
+                  removeBBox(toolState.selectedBBoxId);
+                  setSelectedBBox(null);
+                }
+              }}
+              title="Delete selected annotation (Del / D)"
+            >
+              <span className="hidden sm:inline">Delete</span>
+              <span className="sm:hidden">Del</span>
+            </Button>
+          )}
+          
           {/* Auto-save status indicator */}
           {isSaving && (
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
@@ -192,6 +211,8 @@ export function Toolbar() {
         <span>Shortcuts:</span>
         <span className="bg-muted px-1 rounded">N</span>
         <span>Draw</span>
+          <span className="bg-muted px-1 rounded">E</span>
+          <span>Erase</span>
         <span className="bg-muted px-1 rounded">Space</span>
         <span>Pan</span>
         <span className="bg-muted px-1 rounded">Del</span>

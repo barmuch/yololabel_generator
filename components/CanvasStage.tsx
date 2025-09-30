@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Stage, Layer, Image as KonvaImage, Rect, Transformer } from 'react-konva';
+import { Stage, Layer, Group, Image as KonvaImage, Rect, Transformer } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import Konva from 'konva';
 import { useLabelStore } from '@/lib/store';
@@ -19,16 +19,20 @@ const BBoxComponent = React.memo(function BBoxComponent({
   bbox, 
   classInfo, 
   isSelected, 
+  isHovered,
   onBBoxClick, 
   onBBoxTransform,
-  toolMode
+  toolMode,
+  onHoverChange,
 }: {
   bbox: BBox;
   classInfo: any;
   isSelected: boolean;
-  onBBoxClick: (id: string) => void;
+  isHovered: boolean;
+  onBBoxClick: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   onBBoxTransform: (id: string, attrs: any) => void;
   toolMode: string;
+  onHoverChange: (id: string | null) => void;
 }) {
   return (
     <Rect
@@ -39,9 +43,11 @@ const BBoxComponent = React.memo(function BBoxComponent({
       height={bbox.h}
       stroke={classInfo?.color || '#ff0000'}
       strokeWidth={isSelected ? 3 : 2}
-      fill="transparent"
-      onClick={() => onBBoxClick(bbox.id)}
-      onTap={() => onBBoxClick(bbox.id)}
+      fill={isSelected ? (classInfo?.color || '#ff0000') + '33' : (isHovered ? (classInfo?.color || '#ff0000') + '22' : 'transparent')}
+      onClick={(e) => onBBoxClick(bbox.id, e)}
+  onTap={(e) => onBBoxClick(bbox.id, e as unknown as KonvaEventObject<MouseEvent>)}
+      onMouseEnter={() => toolMode === 'select' && onHoverChange(bbox.id)}
+      onMouseLeave={() => toolMode === 'select' && onHoverChange(null)}
       onTransform={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
       onDragEnd={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
       draggable={toolMode === 'select'}
@@ -59,6 +65,10 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [konvaImage, setKonvaImage] = useState<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef<{x:number;y:number}|null>(null);
+  const viewportStartRef = useRef<{x:number;y:number}>({x:0,y:0});
+  const [hoveredBBoxId, setHoveredBBoxId] = useState<string | null>(null);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentRect, setCurrentRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   
@@ -187,29 +197,103 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
 
   // Handle mouse down
   const handleMouseDown = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    if (toolState.mode === 'pan') return;
-
     const stage = e.target.getStage();
     if (!stage) return;
-
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    // Check if clicked on background
-    if (e.target === e.target.getStage()) {
-      setSelectedBBox(null);
-      
-      if (toolState.mode === 'draw' && selectedClass) {
-        const imagePos = stageToImage(pos.x, pos.y);
+    if (toolState.mode === 'pan') {
+      isPanningRef.current = true;
+      panStartRef.current = pos;
+      viewportStartRef.current = { x: viewport.x, y: viewport.y };
+      // Prevent text selection / dragging artifacts
+      e.evt.preventDefault();
+      return;
+    }
+
+    const target: any = e.target;
+    const targetId: string | undefined = target?.id?.();
+    const targetName: string | undefined = target?.name?.();
+    const targetClass: string | undefined = target?.getClassName?.();
+    const isBackground = target === stage || targetName === 'background-image' || targetClass === 'Group';
+
+    // Clear selection when clicking blank area in select mode
+    if (toolState.mode === 'select' && isBackground) {
+      if (toolState.selectedBBoxId) setSelectedBBox(null);
+    }
+
+    // Prevent starting new rectangle directly on existing bbox node
+    if (toolState.mode === 'draw' && targetId && targetId.startsWith('bbox-')) {
+      return;
+    }
+
+    if (toolState.mode === 'draw' && selectedClass && isBackground) {
+      const imagePos = stageToImage(pos.x, pos.y);
+      if (imagePos.x >= 0 && imagePos.y >= 0 && imagePos.x <= image.width && imagePos.y <= image.height) {
         setIsDrawing(true);
         setStartPoint(imagePos);
         setCurrentRect({ x: imagePos.x, y: imagePos.y, w: 0, h: 0 });
       }
     }
-  }, [toolState.mode, selectedClass, stageToImage, setSelectedBBox]);
+  }, [toolState.mode, toolState.selectedBBoxId, selectedClass, stageToImage, setSelectedBBox, viewport.x, viewport.y, image.width, image.height]);
+
+  // Fallback pan handlers on container (covers cases when HTML overlay intercepts initial mousedown)
+  const containerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (toolState.mode !== 'pan') return;
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    isPanningRef.current = true;
+    panStartRef.current = pos;
+    viewportStartRef.current = { x: viewport.x, y: viewport.y };
+    e.preventDefault();
+  }, [toolState.mode, viewport.x, viewport.y]);
+
+  const containerMouseMove = useCallback((e: React.MouseEvent) => {
+    if (toolState.mode !== 'pan' || !isPanningRef.current || !panStartRef.current) return;
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const dx = (pos.x - panStartRef.current.x);
+    const dy = (pos.y - panStartRef.current.y);
+    // Scale-aware panning (dx,dy already in stage space; viewport is stage offsets)
+    setViewport({ x: viewportStartRef.current.x + dx, y: viewportStartRef.current.y + dy });
+  }, [toolState.mode, setViewport]);
+
+  const containerMouseUp = useCallback(() => {
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
+      panStartRef.current = null;
+    }
+  }, []);
+
+  // Ensure drawing state resets when leaving draw mode
+  useEffect(() => {
+    if (toolState.mode !== 'draw' && (isDrawing || currentRect)) {
+      setIsDrawing(false);
+      setStartPoint(null);
+      setCurrentRect(null);
+    }
+  }, [toolState.mode, isDrawing, currentRect]);
+
+  // Global mouseup safety (in case cursor leaves canvas while panning)
+  useEffect(() => {
+    const up = () => { if (isPanningRef.current) { isPanningRef.current = false; panStartRef.current = null; } };
+    window.addEventListener('mouseup', up);
+    window.addEventListener('mouseleave', up);
+    return () => { window.removeEventListener('mouseup', up); window.removeEventListener('mouseleave', up); };
+  }, []);
 
   // Handle mouse move
   const handleMouseMove = useCallback((e: KonvaEventObject<MouseEvent>) => {
+    if (toolState.mode === 'pan' && isPanningRef.current) {
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos || !panStartRef.current) return;
+      const dx = pos.x - panStartRef.current.x;
+      const dy = pos.y - panStartRef.current.y;
+      setViewport({ x: viewportStartRef.current.x + dx, y: viewportStartRef.current.y + dy });
+      return;
+    }
     if (!isDrawing || !startPoint) return;
 
     const stage = e.target.getStage();
@@ -232,6 +316,11 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
+    if (toolState.mode === 'pan') {
+      isPanningRef.current = false;
+      panStartRef.current = null;
+      return;
+    }
     if (isDrawing && currentRect && selectedClass && currentRect.w > 10 && currentRect.h > 10) {
       addBBox({
         x: currentRect.x,
@@ -246,12 +335,25 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     setIsDrawing(false);
     setStartPoint(null);
     setCurrentRect(null);
-  }, [isDrawing, currentRect, selectedClass, addBBox, image.id]);
+  }, [isDrawing, currentRect, selectedClass, addBBox, image.id, toolState.mode]);
 
   // Handle bbox click
-  const handleBBoxClick = useCallback((bboxId: string) => {
-    setSelectedBBox(bboxId);
-  }, [setSelectedBBox]);
+  const handleBBoxClick = useCallback((bboxId: string, e: KonvaEventObject<MouseEvent | Event>) => {
+    const native = e.evt as MouseEvent;
+    console.log('[BBoxClick] id=', bboxId, 'mode=', toolState.mode, 'selected=', toolState.selectedBBoxId, 'alt?', native?.altKey);
+    if (toolState.mode === 'erase' || (native && native.altKey)) {
+      console.log('[BBoxClick] Deleting bbox via mode/alt path');
+      removeBBox(bboxId);
+      if (toolState.selectedBBoxId === bboxId) setSelectedBBox(null);
+      return;
+    }
+    if (toolState.mode === 'select') {
+      console.log('[BBoxClick] Selecting bbox');
+      setSelectedBBox(bboxId);
+    } else {
+      console.log('[BBoxClick] Ignored click (mode not select/erase)');
+    }
+  }, [removeBBox, setSelectedBBox, toolState.mode, toolState.selectedBBoxId]);
 
   // Handle bbox transform
   const handleBBoxTransform = useCallback((bboxId: string, newAttrs: any) => {
@@ -343,6 +445,8 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
       switch (e.key) {
         case 'Delete':
         case 'Backspace':
+        case 'd':
+        case 'D':
           if (toolState.selectedBBoxId) {
             removeBBox(toolState.selectedBBoxId);
             setSelectedBBox(null);
@@ -356,6 +460,14 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
             setToolMode('pan');
           }
           e.preventDefault();
+          break;
+        case 'n':
+        case 'N':
+          setToolMode('draw');
+          break;
+        case 'e':
+        case 'E':
+          setToolMode('erase');
           break;
         default:
           const num = parseInt(e.key);
@@ -373,7 +485,10 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === ' ') {
-        setToolMode('select');
+        // Only revert to select if currently pan (avoid overwriting user-chosen draw mode)
+        if (useLabelStore.getState().toolState.mode === 'pan') {
+          setToolMode('select');
+        }
       }
     };
 
@@ -400,23 +515,27 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
 
   // Memoize bbox list to prevent unnecessary re-renders
   const memoizedBBoxes = useMemo(() => {
-    return bboxes.map((bbox) => {
+    return bboxes
+      .filter(b => b.imageId === image.id) // guard against mismatched imageId
+      .map((bbox) => {
       const classInfo = projectClasses.find(c => c.id === bbox.classId);
-      const isSelected = bbox.id === toolState.selectedBBoxId;
-      
+  const isSelected = bbox.id === toolState.selectedBBoxId && toolState.mode !== 'erase';
+  const isHovered = bbox.id === hoveredBBoxId;
       return (
         <BBoxComponent
           key={bbox.id}
           bbox={bbox}
           classInfo={classInfo}
           isSelected={isSelected}
+          isHovered={isHovered}
           onBBoxClick={handleBBoxClick}
           onBBoxTransform={handleBBoxTransform}
           toolMode={toolState.mode}
+          onHoverChange={setHoveredBBoxId}
         />
       );
     });
-  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform]);
+  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform, hoveredBBoxId]);
 
   if (!konvaImage) {
     return (
@@ -427,7 +546,12 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   }
 
   return (
-    <div className="w-full h-full overflow-hidden">
+    <div
+      className={"w-full h-full overflow-hidden relative " + (toolState.mode === 'erase' ? 'cursor-crosshair' : toolState.mode === 'select' ? 'cursor-pointer' : toolState.mode === 'pan' ? (isPanningRef.current ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default')}
+      onMouseDown={containerMouseDown}
+      onMouseMove={containerMouseMove}
+      onMouseUp={containerMouseUp}
+    >
       <Stage
         ref={stageRef}
         width={containerWidth}
@@ -436,49 +560,53 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
-        draggable={toolState.mode === 'pan'}
-        x={toolState.mode === 'pan' ? undefined : viewport.x}
-        y={toolState.mode === 'pan' ? undefined : viewport.y}
-        scaleX={viewport.scale}
-        scaleY={viewport.scale}
-        // Performance optimizations
+        onClick={(e) => {
+          if (toolState.mode === 'erase') {
+            const tgt: any = e.target;
+            console.log('[StageClick] erase mode target id=', tgt?.id?.(), 'name=', tgt?.name?.());
+          }
+        }}
+        x={0}
+        y={0}
+        scaleX={1}
+        scaleY={1}
         pixelRatio={window.devicePixelRatio || 1}
         listening={true}
       >
         <Layer
-          // Performance optimizations for layer
+          // Keep clearBeforeDraw for perf but re-enable hit graph so clicks register
           clearBeforeDraw={true}
-          hitGraphEnabled={false}
+          hitGraphEnabled={true}
         >
-          {/* Background image */}
-          <KonvaImage
-            name="background-image"
-            image={konvaImage}
-            x={0}
-            y={0}
-            width={image.width}
-            height={image.height}
-            perfectDrawEnabled={false} // Performance optimization
-          />
-
-          {/* Existing bboxes - using memoized components */}
-          {memoizedBBoxes}
-
-          {/* Current drawing rectangle */}
-          {currentRect && (
-            <Rect
-              x={currentRect.x}
-              y={currentRect.y}
-              width={currentRect.w}
-              height={currentRect.h}
-              stroke={selectedClass?.color || '#ff0000'}
-              strokeWidth={2}
-              fill="transparent"
-              dash={[5, 5]}
-              listening={false}
+          <Group x={viewport.x} y={viewport.y} scaleX={viewport.scale} scaleY={viewport.scale} listening={true}>
+            {/* Background image */}
+            <KonvaImage
+              name="background-image"
+              image={konvaImage}
+              x={0}
+              y={0}
+              width={image.width}
+              height={image.height}
               perfectDrawEnabled={false}
             />
-          )}
+            {/* Existing bboxes */}
+            {memoizedBBoxes}
+            {/* Current drawing rectangle */}
+            {currentRect && (
+              <Rect
+                x={currentRect.x}
+                y={currentRect.y}
+                width={currentRect.w}
+                height={currentRect.h}
+                stroke={selectedClass?.color || '#ff0000'}
+                strokeWidth={2}
+                fill="transparent"
+                dash={[5, 5]}
+                listening={false}
+                perfectDrawEnabled={false}
+              />
+            )}
+          </Group>
 
           {/* Transformer for selected bbox */}
           <Transformer
@@ -498,6 +626,30 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
           />
         </Layer>
       </Stage>
+      {toolState.mode === 'select' && toolState.selectedBBoxId && (() => {
+        const sel = bboxes.find(b => b.id === toolState.selectedBBoxId);
+        if (!sel) return null;
+        const left = sel.x * viewport.scale + viewport.x + sel.w * viewport.scale - 4;
+        const top = sel.y * viewport.scale + viewport.y - 28;
+        return (
+          <button
+            type="button"
+            onClick={() => { removeBBox(sel.id); setSelectedBBox(null); }}
+            className="absolute z-20 text-[10px] px-2 py-1 rounded bg-red-600 text-white shadow hover:bg-red-700 focus:outline-none"
+            style={{ left, top }}
+            title="Delete annotation (Del / Alt+Click / D)"
+          >Del</button>
+        );
+      })()}
+      {toolState.mode === 'select' && toolState.selectedBBoxId && (
+        <div className="absolute bottom-2 right-2 z-20 flex items-center gap-2 bg-black/40 backdrop-blur px-3 py-2 rounded text-xs text-white">
+          <span>ID: {toolState.selectedBBoxId}</span>
+          <button
+            onClick={() => { console.log('[FallbackDeletePanel] remove', toolState.selectedBBoxId); removeBBox(toolState.selectedBBoxId!); setSelectedBBox(null); }}
+            className="bg-red-600 hover:bg-red-700 transition-colors px-2 py-1 rounded"
+          >Delete</button>
+        </div>
+      )}
     </div>
   );
 }

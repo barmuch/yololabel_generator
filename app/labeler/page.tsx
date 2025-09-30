@@ -10,9 +10,10 @@ import { ImageStrip } from '@/components/ImageStrip';
 import { Toolbar } from '@/components/Toolbar';
 import { ExportDialog } from '@/components/ExportDialog';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ImageManager } from '@/components/ImageManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Save, Download, Upload, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Save, Download, Upload, FolderOpen, Tags, Image, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 
 // Dynamically import CanvasStage to avoid SSR issues with Konva
@@ -47,6 +48,9 @@ export default function LabelerPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
+  const [activeTab, setActiveTab] = useState<'classes' | 'images'>('classes'); // Tab state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [stripCollapsed, setStripCollapsed] = useState(false);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fetchedProjectsRef = useRef<Set<string>>(new Set()); // Track which projects we've fetched images for
@@ -437,15 +441,15 @@ export default function LabelerPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
       {/* Header */}
-  <header className="border-b brand-header px-4 py-2 flex-shrink-0">
+  <header className="px-4 py-2 flex-shrink-0 toolbar-blur">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Home
+            <Link href="/" className="focus-ring-soft">
+              <Button variant="subtle" size="sm" className="gap-1">
+                <ArrowLeft className="w-4 h-4" />
+                <span>Home</span>
               </Button>
             </Link>
             
@@ -461,7 +465,7 @@ export default function LabelerPage() {
                 />
               ) : (
                 <h1 
-                  className="text-lg font-semibold cursor-pointer hover:text-primary"
+                  className="text-lg font-semibold cursor-pointer hover:text-[hsl(var(--brand-green-base))] transition-colors"
                   onClick={() => setIsEditingName(true)}
                 >
                   {currentProject.name}
@@ -472,21 +476,21 @@ export default function LabelerPage() {
 
           <div className="flex items-center space-x-2">
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
               onClick={handleImageUpload}
-              className="flex items-center text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] border-[hsl(var(--brand-green-light))]"
+              className="flex items-center"
             >
               <Upload className="w-4 h-4 mr-1" />
               Add Images
             </Button>
             
             <Button
-              variant="outline"
+              variant="subtle"
               size="sm"
               onClick={() => saveToIndexedDB()}
               disabled={isSaving}
-              className="text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] border-[hsl(var(--brand-green-light))]"
+              className="flex items-center"
             >
               <Save className="w-4 h-4 mr-1" />
               {isSaving ? 'Saving...' : 'Save'}
@@ -495,9 +499,9 @@ export default function LabelerPage() {
             {role === 'admin' && (
               <ExportDialog 
                 trigger={
-                  <Button variant="outline" size="sm" className="text-[hsl(var(--brand-green-light))] hover:text-[hsl(var(--brand-green-base))] border-[hsl(var(--brand-green-light))]">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export
+                  <Button variant="soft" size="sm" className="gap-1">
+                    <Download className="w-4 h-4" />
+                    <span>Export</span>
                   </Button>
                 } 
               />
@@ -506,17 +510,63 @@ export default function LabelerPage() {
         </div>
       </header>
 
-      {/* Main content with proper scrolling */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left sidebar - Class panel */}
-  <div className="w-80 border-r bg-card flex flex-col flex-shrink-0 brand-subtle-panel">
-          <ErrorBoundary>
-            <ClassPanel />
-          </ErrorBoundary>
+      {/* Main content (split: sidebar + main) - internal regions own their scroll */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Left sidebar - Tabbed panel */}
+  <div className={`transition-all duration-200 border-r flex flex-col flex-shrink-0 panel-soft overflow-hidden ${sidebarCollapsed ? 'w-10' : 'w-80'}`}>
+          <div className="flex items-center justify-between px-2 py-1 border-b bg-muted/30">
+            {!sidebarCollapsed && <span className="text-xs font-semibold pl-1">Panel</span>}
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSidebarCollapsed(v=>!v)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </Button>
+          </div>
+          {/* Tab buttons */}
+          <div className={`flex border-b bg-[hsl(var(--surface-2))] ${sidebarCollapsed ? 'flex-col items-center gap-1 py-2' : ''}`}>          
+            <button
+              onClick={() => setActiveTab('classes')}
+              className={`${sidebarCollapsed ? 'w-8 h-8 rounded text-[10px]' : 'flex-1 px-4 py-3 text-sm font-medium'} flex items-center justify-center gap-2 transition-colors relative ${
+                activeTab === 'classes'
+                  ? 'text-foreground tab-active-underline'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Tags className="w-4 h-4" />
+              {!sidebarCollapsed && 'Classes'}
+            </button>
+            <button
+              onClick={() => setActiveTab('images')}
+              className={`${sidebarCollapsed ? 'w-8 h-8 rounded text-[10px]' : 'flex-1 px-4 py-3 text-sm font-medium'} flex items-center justify-center gap-2 transition-colors relative ${
+                activeTab === 'images'
+                  ? 'text-foreground tab-active-underline'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Image className="w-4 h-4" />
+              {!sidebarCollapsed && 'Images'}
+            </button>
+          </div>
+
+          {/* Tab content with isolated scroll */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ErrorBoundary>
+              {activeTab === 'classes' ? (
+                <div className="flex-1 overflow-auto p-3">
+                  <ClassPanel />
+                </div>
+              ) : (
+                <div className="flex-1 overflow-auto p-3">
+                  <ImageManager
+                    onImageSelect={(imageId) => setCurrentImage(imageId)}
+                    selectedImageId={currentImageId}
+                  />
+                </div>
+              )}
+            </ErrorBoundary>
+          </div>
         </div>
 
         {/* Main area with scroll */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {/* Toolbar - always visible */}
           <div className="flex-shrink-0">
             <ErrorBoundary>
@@ -525,7 +575,7 @@ export default function LabelerPage() {
           </div>
 
           {/* Canvas area - scrollable if needed */}
-          <div className="flex-1 relative min-h-96 overflow-auto">
+          <div className="flex-1 relative overflow-auto min-h-0">
             <div 
               className="min-h-full relative" 
               ref={canvasContainerRef}
@@ -565,11 +615,19 @@ export default function LabelerPage() {
             </div>
           </div>
 
-          {/* Image strip - always visible at bottom */}
-          <div className="flex-shrink-0">
-            <ErrorBoundary>
-              <ImageStrip />
-            </ErrorBoundary>
+          {/* Image strip - fixed inside main column */}
+          <div className="flex-shrink-0 border-t bg-background">
+            <div className="flex items-center justify-between px-2 py-1 border-b">
+              <span className="text-[11px] font-medium">Images</span>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={()=>setStripCollapsed(v=>!v)} title={stripCollapsed ? 'Show thumbnails' : 'Hide thumbnails'}>
+                {stripCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </Button>
+            </div>
+            {!stripCollapsed && (
+              <ErrorBoundary>
+                <ImageStrip />
+              </ErrorBoundary>
+            )}
           </div>
         </div>
       </div>

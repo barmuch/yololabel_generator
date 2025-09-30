@@ -103,7 +103,7 @@ export type ViewportState = {
   height: number;
 };
 
-export type CanvasMode = 'select' | 'draw' | 'pan';
+export type CanvasMode = 'select' | 'draw' | 'pan' | 'erase';
 
 export type ToolState = {
   mode: CanvasMode;

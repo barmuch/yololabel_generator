@@ -19,6 +19,8 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         brand: "brand-gradient-btn shadow-sm hover:shadow focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-green-light))]",
+        subtle: "bg-[hsl(var(--surface-2))] text-foreground border border-[hsl(var(--surface-border-strong))] hover:bg-[hsl(var(--surface-3))]",
+        soft: "bg-[hsl(var(--brand-green-light)/0.15)] text-[hsl(var(--brand-green-base))] hover:bg-[hsl(var(--brand-green-light)/0.25)] border border-transparent",
       },
       size: {
         default: "h-10 px-4 py-2",
