@@ -77,7 +77,7 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
   }, []);
   useLayoutEffect(() => { restoreScroll(); });
 
-  const images = currentProject?.images || [];
+  const images = useMemo(() => currentProject?.images || [], [currentProject?.images]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return images;
@@ -114,7 +114,7 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
     try {
       let apiTried = false;
       let apiSuccess = false;
-      let apiErrors: string[] = [];
+      const apiErrors: string[] = [];
       try {
         apiTried = true;
         const res = await fetch('/api/images/bulk-delete', {

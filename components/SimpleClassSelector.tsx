@@ -39,7 +39,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
 
   useEffect(() => {
     handleSelectionChange();
-  }, [selectedOption, selectedTemplateId, customClasses]); // Depend on the actual values, not the function
+  }, [selectedOption, selectedTemplateId, customClasses, handleSelectionChange]); // Include handleSelectionChange
 
   const fetchTemplates = async () => {
     try {

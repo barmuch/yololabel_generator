@@ -106,7 +106,7 @@ export default function LabelerPage() {
       
       loadRecentProject();
     }
-  }, [currentProject, currentImageId, isLoading, loadProject]);
+  }, [currentProject, currentImageId, currentImage, isLoading, loadProject]);
 
   // Update project name state when project changes and explicitly fetch images
   useEffect(() => {
@@ -135,7 +135,7 @@ export default function LabelerPage() {
       
       fetchImagesIfNeeded();
     }
-  }, [currentProject?.id, currentProject?.name]); // Only depend on project ID and name, not the entire project object
+  }, [currentProject]);
 
   // Debug images loading
   useEffect(() => {
@@ -151,7 +151,7 @@ export default function LabelerPage() {
         cloudinary: img.cloudinary?.secure_url
       })));
     }
-  }, [currentProject?.images]);
+  }, [currentProject]);
 
   // Set first image as current if none selected
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function LabelerPage() {
         setCurrentImage(currentProject.images[0].id);
       }, 100);
     }
-  }, [currentProject?.id, currentProject?.images?.length, currentImageId, setCurrentImage]); // More specific dependencies
+  }, [currentProject, currentImageId, setCurrentImage]);
 
   // Handle container resize
   useEffect(() => {

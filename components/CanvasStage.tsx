@@ -504,11 +504,13 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   // Cleanup performance refs on unmount
   useEffect(() => {
     return () => {
-      if (wheelTimeoutRef.current) {
-        clearTimeout(wheelTimeoutRef.current);
+      const wheelTimeout = wheelTimeoutRef.current;
+      const animationFrame = animationFrameRef.current;
+      if (wheelTimeout) {
+        clearTimeout(wheelTimeout);
       }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
       }
     };
   }, []);
@@ -535,7 +537,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
         />
       );
     });
-  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform, hoveredBBoxId]);
+  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform, hoveredBBoxId, image.id]);
 
   if (!konvaImage) {
     return (

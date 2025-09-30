@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import { useLabelStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -346,10 +347,12 @@ export default function HomePage() {
       <div className="container mx-auto px-6 py-8 relative min-h-[calc(100vh-120px)]">
         {/* Background Vector */}
         <div className="absolute top-8 left-0 w-1/2 h-3/4 pointer-events-none opacity-20 z-0">
-          <img 
+          <Image 
             src="/Vector.png" 
-            alt="" 
-            className="w-full h-full object-contain object-left-top"
+            alt="Background decoration"
+            fill
+            className="object-contain object-left-top"
+            priority={false}
           />
         </div>
         <div className="max-w-4xl mx-auto relative z-10">
