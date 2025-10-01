@@ -269,7 +269,6 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const dx = (pos.x - panStartRef.current.x);
     const dy = (pos.y - panStartRef.current.y);
-    // Scale-aware panning (dx,dy already in stage space; viewport is stage offsets)
     setViewport({ x: viewportStartRef.current.x + dx, y: viewportStartRef.current.y + dy });
   }, [toolState.mode, setViewport]);
 
@@ -384,6 +383,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   }, [updateBBox, viewport.scale]);
 
   // Optimized wheel handler with throttling and RAF
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- viewport object spread is intentional; setViewport is stable
   const handleWheel = useCallback((e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
 
