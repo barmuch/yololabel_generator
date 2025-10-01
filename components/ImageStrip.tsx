@@ -61,7 +61,11 @@ export function ImageStrip() {
     }
   }, [isAdmin, session, updateImageValidation]);
 
-  const images = useMemo(() => currentProject?.images || [], [currentProject?.images]);
+  // Ensure thumbnail order matches ImageManager (ascending A-Z by filename)
+  const images = useMemo(() => {
+    const arr = currentProject?.images || [];
+    return [...arr].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }, [currentProject?.images]);
   const currentIndex = currentImageId && images.length > 0
     ? images.findIndex(img => img.id === currentImageId)
     : -1;

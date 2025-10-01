@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React, { useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useLabelStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,17 +14,18 @@ interface ImageManagerProps {
   selectedImageId?: string | null;
 }
 
-// Row list item (memoized to prevent unnecessary rerenders)
 const Row = React.memo(function Row({
   image,
   selected,
   current,
+  bboxCount,
   onToggle,
   onActivate,
 }: {
   image: ImageItem;
   selected: boolean;
   current: boolean;
+  bboxCount: number;
   onToggle: () => void;
   onActivate: () => void;
 }) {
@@ -53,31 +54,37 @@ const Row = React.memo(function Row({
       >
         {image.name}
       </button>
+      <div
+        className={`ml-2 px-1.5 py-0.5 rounded border text-[10px] leading-none font-medium min-w-[1.5rem] text-center ${
+          bboxCount > 0
+            ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-300 border-blue-300/60'
+            : 'bg-muted text-muted-foreground border-border/40'
+        }`}
+        title={bboxCount > 0 ? `${bboxCount} annotations` : 'No annotations'}
+      >
+        {bboxCount > 0 ? bboxCount : '-'}
+      </div>
     </div>
   );
-}, (a, b) => a.selected === b.selected && a.current === b.current && a.image.id === b.image.id);
+}, (a, b) => a.selected === b.selected && a.current === b.current && a.image.id === b.image.id && a.bboxCount === b.bboxCount);
 
 export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerProps) {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role as ('admin' | 'member' | undefined);
-  const { currentProject, removeImage, setCurrentImage } = useLabelStore();
+  const { currentProject, removeImage, setCurrentImage, getBBoxesForImage } = useLabelStore();
 
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const scrollPosRef = useRef(0);
 
-  const captureScroll = useCallback(() => {
-    if (listRef.current) scrollPosRef.current = listRef.current.scrollTop;
-  }, []);
-  const restoreScroll = useCallback(() => {
-    if (listRef.current) listRef.current.scrollTop = scrollPosRef.current;
-  }, []);
-  useLayoutEffect(() => { restoreScroll(); });
+  // (1) Ascending A-Z sort
+  const images = useMemo(() => {
+    const arr = currentProject?.images || [];
+    return [...arr].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }, [currentProject?.images]);
 
-  const images = useMemo(() => currentProject?.images || [], [currentProject?.images]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return images;
@@ -99,8 +106,6 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
     });
   }, [filtered]);
 
-  // (Clear selection removed per new UX: button now performs deletion)
-
   const activate = useCallback((id: string) => {
     if (onImageSelect) onImageSelect(id); else setCurrentImage(id);
   }, [onImageSelect, setCurrentImage]);
@@ -110,7 +115,6 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
     const list = Array.from(selected);
     if (!confirm(`Hapus ${list.length} gambar? Semua annotation terkait akan ikut dihapus.`)) return;
     setIsDeleting(true);
-    captureScroll();
     try {
       let apiTried = false;
       let apiSuccess = false;
@@ -129,7 +133,6 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
         }
         if (!res.ok || !json?.success) {
           const errMsg = json?.error || json?.details || res.statusText;
-          // Special case: rate limit but we will still remove locally; downgrade severity
           if (res.status === 429) {
             apiErrors.push('Rate limited (server). Menghapus lokal tetap lanjut.');
           } else {
@@ -138,15 +141,14 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
         } else {
           apiSuccess = true;
           const resultErrors = json?.results?.errors || [];
-          if (resultErrors.length > 0) {
-            apiErrors.push(...resultErrors.map((e: any) => `${e.imageId}: ${e.error}`));
-          }
+            if (resultErrors.length > 0) {
+              apiErrors.push(...resultErrors.map((e: any) => `${e.imageId}: ${e.error}`));
+            }
         }
       } catch (err: any) {
         apiErrors.push(err?.message || 'Network error');
       }
 
-      // Always remove locally for consistency
       for (const id of list) {
         await removeImage(id);
       }
@@ -157,7 +159,6 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
       } else if (apiSuccess && apiErrors.length > 0) {
         toast.warning(`Berhasil (lokal & server). Ada peringatan.`, { description: apiErrors.slice(0,5).join('\n') });
       } else if (!apiSuccess && apiTried) {
-        // Distinguish rate limit vs fatal
         const onlyRateLimit = apiErrors.length > 0 && apiErrors.every(e => e.toLowerCase().includes('rate'));
         if (onlyRateLimit) {
           toast.success(`Dihapus lokal (${list.length}). Server dibatasi sementara.`);
@@ -171,9 +172,25 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
       toast.error('Gagal menghapus gambar', { description: e.message });
     } finally {
       setIsDeleting(false);
-      restoreScroll();
     }
-  }, [currentProject, selected, removeImage, captureScroll, restoreScroll]);
+  }, [currentProject, selected, removeImage]);
+
+  // (3) Auto scroll to selected image if changed externally
+  useEffect(() => {
+    if (!listRef.current || !selectedImageId) return;
+    const container = listRef.current;
+    const el = container.querySelector(`[data-image-id="${selectedImageId}"]`) as HTMLElement | null;
+    if (!el) return;
+    const elTop = el.offsetTop;
+    const elBottom = elTop + el.offsetHeight;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+    if (elTop < viewTop) {
+      container.scrollTo({ top: elTop, behavior: 'smooth' });
+    } else if (elBottom > viewBottom) {
+      container.scrollTo({ top: elBottom - container.clientHeight, behavior: 'smooth' });
+    }
+  }, [selectedImageId]);
 
   if (!currentProject) {
     return <div className="p-4 text-sm text-muted-foreground">Tidak ada project aktif</div>;
@@ -181,14 +198,13 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header / search & actions container (fixed height to prevent scroll jump) */}
       <div className="p-3 border-b bg-background sticky top-0 z-10 space-y-2">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Cari file..."
             value={search}
-            onChange={(e) => { captureScroll(); setSearch(e.target.value); }}
+            onChange={(e) => { setSearch(e.target.value); }}
             className="pl-9 h-9 text-sm"
           />
         </div>
@@ -214,21 +230,24 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
         </div>
       </div>
 
-      {/* Scrollable list */}
       <div ref={listRef} className="flex-1 overflow-auto font-mono text-[12px] leading-relaxed">
         {filtered.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted-foreground">Tidak ada gambar</div>
         ) : (
-          filtered.map(img => (
-            <Row
-              key={img.id}
-              image={img}
-              selected={selected.has(img.id)}
-              current={img.id === selectedImageId}
-              onToggle={() => { captureScroll(); toggleOne(img.id); }}
-              onActivate={() => activate(img.id)}
-            />
-          ))
+          filtered.map(img => {
+            const bboxCount = getBBoxesForImage(img.id).length;
+            return (
+              <Row
+                key={img.id}
+                image={img}
+                selected={selected.has(img.id)}
+                current={img.id === selectedImageId}
+                bboxCount={bboxCount}
+                onToggle={() => { toggleOne(img.id); }}
+                onActivate={() => activate(img.id)}
+              />
+            );
+          })
         )}
       </div>
     </div>
