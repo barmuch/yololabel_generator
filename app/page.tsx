@@ -347,12 +347,10 @@ export default function HomePage() {
       <div className="container mx-auto px-6 py-8 relative min-h-[calc(100vh-120px)]">
         {/* Background Vector */}
         <div className="absolute top-8 left-0 w-1/2 h-3/4 pointer-events-none opacity-20 z-0">
-          <Image 
+          <img 
             src="/Vector.png" 
             alt="Background decoration"
-            fill
-            className="object-contain object-left-top"
-            priority={false}
+            className="w-full h-full object-contain object-left-top"
           />
         </div>
         <div className="max-w-4xl mx-auto relative z-10">

@@ -39,7 +39,7 @@ export default function SimpleClassSelector({ onSelectionChange }: SimpleClassSe
 
   useEffect(() => {
     handleSelectionChange();
-  }, [selectedOption, selectedTemplateId, customClasses, handleSelectionChange]); // Include handleSelectionChange
+  }, [selectedOption, selectedTemplateId, customClasses]); // Remove handleSelectionChange to prevent infinite loop
 
   const fetchTemplates = async () => {
     try {
