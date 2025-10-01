@@ -19,6 +19,7 @@ const Row = React.memo(function Row({
   selected,
   current,
   bboxCount,
+  status,
   onToggle,
   onActivate,
 }: {
@@ -26,6 +27,7 @@ const Row = React.memo(function Row({
   selected: boolean;
   current: boolean;
   bboxCount: number;
+  status: 'empty' | 'annotated' | 'validated';
   onToggle: () => void;
   onActivate: () => void;
 }) {
@@ -48,11 +50,22 @@ const Row = React.memo(function Row({
         {selected && <Check className="w-3 h-3" />}
       </button>
       <button
-        className={`flex-1 text-left truncate font-medium ${current ? 'text-primary' : 'text-foreground'}`}
+        className={`flex-1 text-left truncate font-medium flex items-center gap-1 ${current ? 'text-primary' : 'text-foreground'}`}
         onClick={onActivate}
         title={image.name}
       >
-        {image.name}
+        <span
+          className={
+            'inline-block w-2 h-2 rounded-full flex-shrink-0 border border-white/60 ' +
+            (status === 'validated'
+              ? 'bg-green-500'
+              : status === 'annotated'
+                ? 'bg-orange-500'
+                : 'bg-gray-300 dark:bg-gray-500')
+          }
+          title={status}
+        />
+        <span className="truncate">{image.name}</span>
       </button>
       <div
         className={`ml-2 px-1.5 py-0.5 rounded border text-[10px] leading-none font-medium min-w-[1.5rem] text-center ${
@@ -66,7 +79,7 @@ const Row = React.memo(function Row({
       </div>
     </div>
   );
-}, (a, b) => a.selected === b.selected && a.current === b.current && a.image.id === b.image.id && a.bboxCount === b.bboxCount);
+}, (a, b) => a.selected === b.selected && a.current === b.current && a.image.id === b.image.id && a.bboxCount === b.bboxCount && a.status === b.status);
 
 export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerProps) {
   const { data: session } = useSession();
@@ -75,6 +88,8 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
 
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Unified status filter: all | empty | annotated | validated
+  const [statusFilter, setStatusFilter] = useState<'all' | 'empty' | 'annotated' | 'validated'>('all');
   const [isDeleting, setIsDeleting] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -87,9 +102,20 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return images;
-    return images.filter(i => i.name.toLowerCase().includes(q));
-  }, [images, search]);
+    let list = images;
+    if (q) list = list.filter(i => i.name.toLowerCase().includes(q));
+    if (statusFilter !== 'all') {
+      list = list.filter(i => {
+        const count = getBBoxesForImage(i.id).length;
+        const validated = i.status === 'validated';
+        if (statusFilter === 'validated') return validated;
+        if (statusFilter === 'annotated') return !validated && count > 0;
+        if (statusFilter === 'empty') return count === 0;
+        return true;
+      });
+    }
+    return list;
+  }, [images, search, statusFilter, getBBoxesForImage]);
 
   const toggleOne = useCallback((id: string) => {
     setSelected(prev => {
@@ -208,11 +234,24 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
             className="pl-9 h-9 text-sm"
           />
         </div>
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
           <span>{filtered.length} / {images.length} files</span>
-          {selected.size > 0 && (
-            <span className="text-foreground font-medium">{selected.size} dipilih</span>
-          )}
+          <div className="flex items-center gap-2 ml-auto">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="h-7 rounded border bg-background text-[11px] px-2 focus:outline-none focus:ring focus:ring-primary/30"
+              title="Filter status"
+            >
+              <option value="all">All</option>
+              <option value="empty">Empty</option>
+              <option value="annotated">Annotated</option>
+              <option value="validated">Validated</option>
+            </select>
+            {selected.size > 0 && (
+              <span className="text-foreground font-medium whitespace-nowrap">{selected.size} dipilih</span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 items-center min-h-[2rem]">
           {selected.size > 0 ? (
@@ -236,6 +275,9 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
         ) : (
           filtered.map(img => {
             const bboxCount = getBBoxesForImage(img.id).length;
+            const status: 'empty' | 'annotated' | 'validated' = img.status === 'validated'
+              ? 'validated'
+              : (bboxCount > 0 ? 'annotated' : 'empty');
             return (
               <Row
                 key={img.id}
@@ -243,6 +285,7 @@ export function ImageManager({ onImageSelect, selectedImageId }: ImageManagerPro
                 selected={selected.has(img.id)}
                 current={img.id === selectedImageId}
                 bboxCount={bboxCount}
+                status={status}
                 onToggle={() => { toggleOne(img.id); }}
                 onActivate={() => activate(img.id)}
               />
