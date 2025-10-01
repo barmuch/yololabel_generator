@@ -69,6 +69,7 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
   const panStartRef = useRef<{x:number;y:number}|null>(null);
   const viewportStartRef = useRef<{x:number;y:number}>({x:0,y:0});
   const [hoveredBBoxId, setHoveredBBoxId] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentRect, setCurrentRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   
@@ -160,6 +161,20 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
       }
     };
   }, [image.cloudinary?.secure_url, image.url, image.blobUrl, image.name, containerWidth, containerHeight, setViewport]);
+
+  // Handle hover change with tooltip positioning
+  const handleHoverChange = useCallback((bboxId: string | null) => {
+    setHoveredBBoxId(bboxId);
+    if (bboxId && stageRef.current) {
+      const stage = stageRef.current;
+      const pointer = stage.getPointerPosition();
+      if (pointer) {
+        setTooltipPosition({ x: pointer.x, y: pointer.y });
+      }
+    } else {
+      setTooltipPosition(null);
+    }
+  }, []);
 
   // Handle transformer selection
   useEffect(() => {
@@ -533,11 +548,11 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
           onBBoxClick={handleBBoxClick}
           onBBoxTransform={handleBBoxTransform}
           toolMode={toolState.mode}
-          onHoverChange={setHoveredBBoxId}
+          onHoverChange={handleHoverChange}
         />
       );
     });
-  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform, hoveredBBoxId, image.id]);
+  }, [bboxes, projectClasses, toolState.selectedBBoxId, toolState.mode, handleBBoxClick, handleBBoxTransform, hoveredBBoxId, image.id, handleHoverChange]);
 
   if (!konvaImage) {
     return (
@@ -652,6 +667,33 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
           >Delete</button>
         </div>
       )}
+      
+      {/* Hover Tooltip */}
+      {toolState.mode === 'select' && hoveredBBoxId && tooltipPosition && (() => {
+        const hoveredBBox = bboxes.find(b => b.id === hoveredBBoxId);
+        const classInfo = projectClasses.find(c => c.id === hoveredBBox?.classId);
+        if (!hoveredBBox || !classInfo) return null;
+        
+        return (
+          <div
+            className="absolute z-30 pointer-events-none"
+            style={{
+              left: tooltipPosition.x + 10,
+              top: tooltipPosition.y - 30,
+            }}
+          >
+            <div className="bg-black/80 backdrop-blur text-white text-xs px-2 py-1 rounded shadow-lg border border-white/20">
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded-sm" 
+                  style={{ backgroundColor: classInfo.color }}
+                />
+                <span className="font-medium">{classInfo.name}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
