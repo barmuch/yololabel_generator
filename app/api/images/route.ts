@@ -120,7 +120,8 @@ export async function POST(request: NextRequest) {
 
 /**
  * Secure GET: Retrieves images for a project with validation and rate limiting
- * Query: ?projectId=<string>
+ * Query: ?projectId=<string>&limit=<number>
+ * limit: Optional, defaults to 5000, max 10000
  */
 export async function GET(request: NextRequest) {
   try {
@@ -137,6 +138,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');
+    const limitParam = searchParams.get('limit');
 
     const db = await getDatabase();
     const images = db.collection('images');
@@ -151,11 +153,20 @@ export async function GET(request: NextRequest) {
       }
 
       const sanitizedProjectId = projectId.trim().slice(0, 100); // Reasonable length limit
+      
+      // Parse limit parameter with reasonable bounds
+      let limit = 5000; // Increased default limit for better user experience
+      if (limitParam) {
+        const parsedLimit = parseInt(limitParam, 10);
+        if (!isNaN(parsedLimit) && parsedLimit > 0) {
+          limit = Math.min(parsedLimit, 10000); // Cap at 10k to prevent server overload
+        }
+      }
 
       const docs = await images
         .find({ projectId: sanitizedProjectId })
         .sort({ createdAt: -1 })
-        .limit(1000) // Prevent excessive data retrieval
+        .limit(limit)
         .toArray();
 
       // Sanitize response data

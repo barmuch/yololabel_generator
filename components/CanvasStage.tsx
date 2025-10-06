@@ -30,7 +30,7 @@ const BBoxComponent = React.memo(function BBoxComponent({
   isSelected: boolean;
   isHovered: boolean;
   onBBoxClick: (id: string, e: KonvaEventObject<MouseEvent>) => void;
-  onBBoxTransform: (id: string, attrs: any) => void;
+  onBBoxTransform: (id: string, attrs: any, isResize?: boolean) => void;
   toolMode: string;
   onHoverChange: (id: string | null) => void;
 }) {
@@ -45,11 +45,23 @@ const BBoxComponent = React.memo(function BBoxComponent({
       strokeWidth={isSelected ? 3 : 2}
       fill={isSelected ? (classInfo?.color || '#ff0000') + '33' : (isHovered ? (classInfo?.color || '#ff0000') + '22' : 'transparent')}
       onClick={(e) => onBBoxClick(bbox.id, e)}
-  onTap={(e) => onBBoxClick(bbox.id, e as unknown as KonvaEventObject<MouseEvent>)}
+      onTap={(e) => onBBoxClick(bbox.id, e as unknown as KonvaEventObject<MouseEvent>)}
       onMouseEnter={() => toolMode === 'select' && onHoverChange(bbox.id)}
       onMouseLeave={() => toolMode === 'select' && onHoverChange(null)}
-      onTransform={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
-      onDragEnd={(e) => onBBoxTransform(bbox.id, e.target.attrs)}
+      onTransform={(e) => {
+        // This is called during resize via transformer
+        onBBoxTransform(bbox.id, e.target.attrs, true);
+      }}
+      onTransformEnd={(e) => {
+        // Reset scale factors after transform to keep them at 1
+        const node = e.target;
+        node.scaleX(1);
+        node.scaleY(1);
+      }}
+      onDragEnd={(e) => {
+        // This is called during drag (position change only)
+        onBBoxTransform(bbox.id, e.target.attrs, false);
+      }}
       draggable={toolMode === 'select'}
       opacity={bbox.hidden ? 0.3 : 1}
       listening={!bbox.locked}
@@ -186,11 +198,19 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     if (toolState.selectedBBoxId && stage) {
       const selectedNode = stage.findOne(`#bbox-${toolState.selectedBBoxId}`);
       if (selectedNode) {
+        // Attach transformer to the selected bbox
         transformer.nodes([selectedNode]);
+        // Force redraw to show transformer
         transformer.getLayer()?.batchDraw();
+        
+        console.log('[Transformer] Attached to bbox:', toolState.selectedBBoxId);
+      } else {
+        console.log('[Transformer] BBox node not found:', toolState.selectedBBoxId);
+        transformer.nodes([]);
       }
     } else {
       transformer.nodes([]);
+      console.log('[Transformer] Detached - no selection');
     }
   }, [toolState.selectedBBoxId]);
 
@@ -369,18 +389,29 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
     }
   }, [removeBBox, setSelectedBBox, toolState.mode, toolState.selectedBBoxId]);
 
-  // Handle bbox transform
-  const handleBBoxTransform = useCallback((bboxId: string, newAttrs: any) => {
-    const scaledWidth = newAttrs.width * newAttrs.scaleX / viewport.scale;
-    const scaledHeight = newAttrs.height * newAttrs.scaleY / viewport.scale;
+  // Handle bbox transform (resize and drag)
+  const handleBBoxTransform = useCallback((bboxId: string, newAttrs: any, isResize = false) => {
+    console.log('[Transform]', bboxId, 'isResize:', isResize, 'attrs:', newAttrs);
+    
+    if (isResize) {
+      // Handle resize - apply scale factors
+      const scaledWidth = newAttrs.width * (newAttrs.scaleX || 1);
+      const scaledHeight = newAttrs.height * (newAttrs.scaleY || 1);
 
-    updateBBox(bboxId, {
-      x: newAttrs.x / viewport.scale,
-      y: newAttrs.y / viewport.scale,
-      w: scaledWidth,
-      h: scaledHeight,
-    });
-  }, [updateBBox, viewport.scale]);
+      updateBBox(bboxId, {
+        x: newAttrs.x,
+        y: newAttrs.y,
+        w: scaledWidth,
+        h: scaledHeight,
+      });
+    } else {
+      // Handle drag - only update position, preserve size
+      updateBBox(bboxId, {
+        x: newAttrs.x,
+        y: newAttrs.y,
+      });
+    }
+  }, [updateBBox]);
 
   // Optimized wheel handler with throttling and RAF
   // eslint-disable-next-line react-hooks/exhaustive-deps -- viewport object spread is intentional; setViewport is stable
@@ -623,24 +654,30 @@ export function CanvasStage({ image, containerWidth, containerHeight }: CanvasSt
                 perfectDrawEnabled={false}
               />
             )}
+            
+            {/* Transformer for selected bbox - moved inside group for proper scaling */}
+            <Transformer
+              ref={transformerRef}
+              boundBoxFunc={(oldBox, newBox) => {
+                // Limit minimum resize
+                if (newBox.width < 10 || newBox.height < 10) {
+                  return oldBox;
+                }
+                return newBox;
+              }}
+              anchorStroke="#4F46E5"
+              anchorFill="#fff"
+              anchorSize={8}
+              borderStroke="#4F46E5"
+              borderDash={[3, 3]}
+              enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+              keepRatio={false}
+              centeredScaling={false}
+              rotateEnabled={false}
+              flipEnabled={false}
+              resizeEnabled={true}
+            />
           </Group>
-
-          {/* Transformer for selected bbox */}
-          <Transformer
-            ref={transformerRef}
-            boundBoxFunc={(oldBox, newBox) => {
-              // Limit resize
-              if (newBox.width < 10 || newBox.height < 10) {
-                return oldBox;
-              }
-              return newBox;
-            }}
-            anchorStroke="#4F46E5"
-            anchorFill="#fff"
-            anchorSize={8}
-            borderStroke="#4F46E5"
-            borderDash={[3, 3]}
-          />
         </Layer>
       </Stage>
       {toolState.mode === 'select' && toolState.selectedBBoxId && (() => {

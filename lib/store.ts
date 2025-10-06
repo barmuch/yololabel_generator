@@ -185,7 +185,15 @@ export const useLabelStore = create<LabelStore>()(
 
       set((state) => {
         state.currentProject = project;
-        state.currentImageId = project.images.length > 0 ? project.images[0].id : null;
+        // Sort images alphabetically and select the first one
+        if (project.images.length > 0) {
+          const sortedImages = [...project.images].sort((a, b) => 
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          );
+          state.currentImageId = sortedImages[0].id;
+        } else {
+          state.currentImageId = null;
+        }
       });
       
       if (process.env.NODE_ENV === 'development') {
@@ -833,7 +841,7 @@ export const useLabelStore = create<LabelStore>()(
 
         console.log('[fetchAndMergeServerImages] Fetching server-stored images for project:', pid);
 
-        const res = await fetch(`/api/images?projectId=${encodeURIComponent(pid)}`);
+        const res = await fetch(`/api/images?projectId=${encodeURIComponent(pid)}&limit=10000`);
         if (!res.ok) {
           // allow future retries
           fetchedProjectImages.delete(pid);
@@ -922,6 +930,16 @@ export const useLabelStore = create<LabelStore>()(
           }
 
           console.log(`[fetchAndMergeServerImages] Added ${addedCount} new images. Project now has ${state.currentProject.images.length} total images`);
+          
+          // If we added new images and no current image is selected, select the first one alphabetically
+          if (addedCount > 0 && !state.currentImageId && state.currentProject.images.length > 0) {
+            const sortedImages = [...state.currentProject.images].sort((a, b) => 
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            );
+            state.currentImageId = sortedImages[0].id;
+            console.log(`[fetchAndMergeServerImages] Auto-selected first image:`, sortedImages[0].name);
+          }
+          
           state.currentProject.updatedAt = Date.now();
         });
 

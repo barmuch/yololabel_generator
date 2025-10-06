@@ -11,6 +11,8 @@ import { formatFileSize } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 
+const IMAGES_PER_PAGE = 20;
+
 export function ImageStrip() {
   const {
     currentProject,
@@ -24,6 +26,7 @@ export function ImageStrip() {
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin';
   const [validatingImages, setValidatingImages] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -62,11 +65,23 @@ export function ImageStrip() {
   }, [isAdmin, session, updateImageValidation]);
 
   // Ensure thumbnail order matches ImageManager (ascending A-Z by filename)
-  const images = useMemo(() => {
+  const allImages = useMemo(() => {
     const arr = currentProject?.images || [];
     return [...arr].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   }, [currentProject?.images]);
-  const currentIndex = currentImageId && images.length > 0
+
+  const totalPages = Math.ceil(allImages.length / IMAGES_PER_PAGE);
+  
+  const images = useMemo(() => {
+    const startIndex = (currentPage - 1) * IMAGES_PER_PAGE;
+    const endIndex = startIndex + IMAGES_PER_PAGE;
+    return allImages.slice(startIndex, endIndex);
+  }, [allImages, currentPage]);
+  const currentIndex = currentImageId && allImages.length > 0
+    ? allImages.findIndex(img => img.id === currentImageId)
+    : -1;
+  
+  const currentIndexInPage = currentImageId && images.length > 0
     ? images.findIndex(img => img.id === currentImageId)
     : -1;
 
@@ -94,7 +109,17 @@ export function ImageStrip() {
     }
   }, [currentProject, images, currentImageId, currentIndex, isAdmin]);
 
-  // Auto-scroll to current image
+  // Auto-switch to page containing selected image
+  useEffect(() => {
+    if (currentImageId && currentIndex >= 0) {
+      const requiredPage = Math.ceil((currentIndex + 1) / IMAGES_PER_PAGE);
+      if (requiredPage !== currentPage) {
+        setCurrentPage(requiredPage);
+      }
+    }
+  }, [currentImageId, currentIndex, currentPage]);
+
+  // Auto-scroll to current image within current page
   useEffect(() => {
     if (currentImageId && scrollRef.current) {
       const currentElement = scrollRef.current.querySelector(`[data-image-id="${currentImageId}"]`);
@@ -102,19 +127,33 @@ export function ImageStrip() {
         currentElement.scrollIntoView({ behavior: 'smooth', inline: 'center' });
       }
     }
-  }, [currentImageId]);
+  }, [currentImageId, currentPage]);
 
   const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
-      setCurrentImage(images[currentIndex - 1].id);
+      const prevImage = allImages[currentIndex - 1];
+      setCurrentImage(prevImage.id);
+      
+      // Auto switch to correct page if needed
+      const prevImagePage = Math.ceil((currentIndex) / IMAGES_PER_PAGE);
+      if (prevImagePage !== currentPage) {
+        setCurrentPage(prevImagePage);
+      }
     }
-  }, [currentIndex, images, setCurrentImage]);
+  }, [currentIndex, allImages, setCurrentImage, currentPage]);
 
   const handleNext = useCallback(() => {
-    if (currentIndex < images.length - 1) {
-      setCurrentImage(images[currentIndex + 1].id);
+    if (currentIndex < allImages.length - 1) {
+      const nextImage = allImages[currentIndex + 1];
+      setCurrentImage(nextImage.id);
+      
+      // Auto switch to correct page if needed
+      const nextImagePage = Math.ceil((currentIndex + 2) / IMAGES_PER_PAGE);
+      if (nextImagePage !== currentPage) {
+        setCurrentPage(nextImagePage);
+      }
     }
-  }, [currentIndex, images, setCurrentImage]);
+  }, [currentIndex, allImages, setCurrentImage, currentPage]);
 
   useEffect(() => {
     const handleKeyNavigation = (e: KeyboardEvent) => {
@@ -170,17 +209,64 @@ export function ImageStrip() {
             <ChevronLeft className="w-4 h-4" />
           </Button>
           
-          <span className="text-sm font-medium text-foreground">
-            {currentIndex + 1} of {images.length}
-          </span>
+          <div className="text-xs text-center">
+            <div className="font-medium text-foreground">
+              {currentIndex >= 0 ? currentIndex + 1 : 0} of {allImages.length}
+            </div>
+            <div className="text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </div>
+          </div>
           
           <Button
             size="sm"
             variant="outline"
             onClick={handleNext}
-            disabled={currentIndex >= images.length - 1}
+            disabled={currentIndex >= allImages.length - 1}
           >
             <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const newPage = Math.max(1, currentPage - 1);
+              setCurrentPage(newPage);
+              // Auto-select first image in the new page
+              const firstImageInPage = allImages[(newPage - 1) * IMAGES_PER_PAGE];
+              if (firstImageInPage) {
+                setCurrentImage(firstImageInPage.id);
+              }
+            }}
+            disabled={currentPage <= 1}
+            className="text-xs px-2"
+          >
+            ← Prev Page
+          </Button>
+          
+          <span className="text-xs text-muted-foreground px-2">
+            {((currentPage - 1) * IMAGES_PER_PAGE) + 1}-{Math.min(currentPage * IMAGES_PER_PAGE, allImages.length)}
+          </span>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const newPage = Math.min(totalPages, currentPage + 1);
+              setCurrentPage(newPage);
+              // Auto-select first image in the new page
+              const firstImageInPage = allImages[(newPage - 1) * IMAGES_PER_PAGE];
+              if (firstImageInPage) {
+                setCurrentImage(firstImageInPage.id);
+              }
+            }}
+            disabled={currentPage >= totalPages}
+            className="text-xs px-2"
+          >
+            Next Page →
           </Button>
         </div>
 
@@ -190,12 +276,12 @@ export function ImageStrip() {
       </div>
 
       {/* Validation statistics */}
-      {images.length > 0 && (
+      {allImages.length > 0 && (
         <div className="px-3 pb-2 text-xs text-muted-foreground">
           {(() => {
-            const validatedCount = images.filter(img => img.status === 'validated').length;
-            const labeledCount = images.filter(img => img.status === 'labeled').length;
-            const totalCount = images.length;
+            const validatedCount = allImages.filter(img => img.status === 'validated').length;
+            const labeledCount = allImages.filter(img => img.status === 'labeled').length;
+            const totalCount = allImages.length;
             
             return (
               <div className="flex items-center justify-between">
@@ -386,19 +472,22 @@ export function ImageStrip() {
                     </div>
                   )}
 
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="absolute top-1 right-1 w-5 h-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`Remove ${image.name}?`)) {
-                        removeImage(image.id);
-                      }
-                    }}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
+                  {/* Remove button - only for admin */}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="absolute top-1 right-1 w-5 h-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Remove ${image.name}?`)) {
+                          removeImage(image.id);
+                        }
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  )}
 
                   {/* Persistent validation badge - always visible for validated images at center top */}
                   {!isAdmin && image.status === 'validated' && (
